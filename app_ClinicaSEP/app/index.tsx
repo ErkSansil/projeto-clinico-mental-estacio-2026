@@ -1,12 +1,10 @@
-import { View, Text, TouchableOpacity } from "react-native";
-import { router } from "expo-router";
+import { Redirect } from "expo-router";
+import { useAuth } from "../context/AuthContext";
 
-export default function Home() {
-  return (
-    <View>
-      <TouchableOpacity onPress={() => router.push("/login")}>
-        <Text>Ir para Login</Text>
-      </TouchableOpacity>
-    </View>
-  );
+export default function Index() {
+  const { user, loading } = useAuth();
+
+  if (loading) return null;
+
+  return <Redirect href={user ? "/dashboard" : "/login"} />;
 }
