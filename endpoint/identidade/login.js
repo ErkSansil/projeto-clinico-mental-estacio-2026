@@ -51,11 +51,6 @@ module.exports = (app) => {
                 return res.status(validacao.status).json({ mensagem: validacao.mensagem });
             }
 
-            if (!TOKEN_SECRET) {
-				const erro = funcoesGerais.criarErro(500, 'JWT_SECRET nao configurado.');
-				return res.status(erro.status).json({ mensagem: erro.mensagem });
-            }
-
             identificacao = matriculaProfissional 
                 ? { matricula: String(matriculaProfissional).trim() } 
                 : { cpf: String(cpf).trim() };

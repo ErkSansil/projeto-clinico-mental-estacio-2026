@@ -1,4 +1,5 @@
 const CADASTRO_PATH = '/identidade/cadastro';
+const {autenticar, autorizar} = require('../../middleware/auth.js');
 
 const db = require('../../db/metodosBd.js');
 const funcoesGerais = require('../auxiliar/funcoesGerais.js');
@@ -69,11 +70,11 @@ async function validarCadastro(payload = {}) {
 	if (String(senha).trim() !== String(payload.confirmacaoSenha).trim()){
 		return funcoesGerais.criarErro(400, 'As senhas não coincidem.');
 	}
+	
+	const duplicidade = await servicosIdentidade.verificarIdentidadeOuEmailCadastrado(cpfNormalizado, emailNormalizado, matriculaNormalizada);
 
-	const duplicidade = await servicosIdentidade.verificarCpfOuEmailCadastrado(cpfNormalizado, emailNormalizado);
-
-	if (duplicidade.cpfCadastrado || duplicidade.emailCadastrado) {
-		return funcoesGerais.criarErro(422, 'CPF ou e-mail já cadastrado.');
+	if (duplicidade.cpfCadastrado || duplicidade.emailCadastrado || duplicidade.matriculaCadastrada) {
+		return funcoesGerais.criarErro(422, 'CPF, e-mail ou matrícula já cadastrados.');
 	}
 
 	return { valido: true };
@@ -90,42 +91,19 @@ module.exports = (app) => {
 				return res.status(validacao.status).json({ erro: validacao.mensagem });
 			}
 
-			if (String(req.body.tipo).toLowerCase() === 'profissional' || String(req.body.tipo).toLowerCase() === 'admin') {
-				await db.inserir('profissional', {
-					id: funcoesGerais.gerarNumero11Digitos(),
-					cpf: cpf,
-					nome: nomeCompleto,
-					email: email,
-					senha: funcoesGerais.gerarHashSenha(senha),
-					celular: celular,
-					matricula: matricula,
-					privilegio: String(req.body.tipo).toLowerCase() === 'admin' ? 1 : 0
-				});
-			} else {
-				await db.inserir('paciente', {
-					id: funcoesGerais.gerarNumero11Digitos(),
-					cpf: cpf,
-					nome: nomeCompleto,
-					email: email,
-					senha: funcoesGerais.gerarHashSenha(senha),
-					celular: celular,
-					endereco: req.body.endereco,
-					dataNascimento: funcoesGerais.formatarData(req.body.dataNascimento).data,
-					responsavelNome: req.body.responsavelNome || null,
-					responsavelContato: req.body.responsavelContato || null
-				});
-			}
+			await servicosIdentidade.cadastrarUsuario(req.body.tipo, req.body);
 
 			res.status(201).json({ 
 				sucesso: true,
 				status: 200,
-				mensagem: 'Cadastro realizado com sucesso.' });
+				mensagem: 'Cadastro realizado com sucesso.' }
+			);
 		} catch (error) {
 			console.error('Erro ao processar cadastro:', error);
 			res.status(500).json({ erro: 'Erro interno ao processar cadastro: ' + error.message });
 		}
 	});
-	app.put(CADASTRO_PATH, async (req, res) => {
+	app.put(CADASTRO_PATH, autenticar, autorizar('admin'), async (req, res) => {
 		try {
 			const { cpfPaciente, atividade } = req.query;
 

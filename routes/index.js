@@ -4,4 +4,5 @@ module.exports = (app) => {
     require('../endpoint/agendamento/consulta')(app);
     require('../endpoint/agendamento/reagendamento')(app);
     require('../endpoint/agendamento/cancelamento')(app);
+    require('../endpoint/agendamento/presenca')(app);
 };

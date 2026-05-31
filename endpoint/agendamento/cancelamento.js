@@ -1,14 +1,13 @@
 const CANCELAMENTO = '/agendamento/cancelamento';
+const {autenticar} = require('../../middleware/auth.js');
 
 const funcoesGerais = require('../auxiliar/funcoesGerais.js');
 const servicos = require('./servicos.js');
 const servicosIdentidade = require('../identidade/servicos.js');
-const { autenticar, autorizar } = require('../../middleware/auth.js');
 
 async function validarCancelamento(payload = {}) {
     const cpfPacienteNormalizado = String(payload.cpfPaciente).trim();
-    const matriculaProfissionalNormalizada = String(payload.matriculaProfissional).trim();
-    const camposObrigatorios = ['cpfPaciente', 'matriculaProfissional', 'dataConsulta', 'horario'];
+    const camposObrigatorios = ['cpfPaciente', 'dataConsulta', 'horario'];
 
     const validacaoCampos = funcoesGerais.validarCamposObrigatorios(camposObrigatorios, payload);
 
@@ -44,11 +43,13 @@ async function validarCancelamento(payload = {}) {
 }
 
 module.exports = (app) => {
-    app.post(CANCELAMENTO, async (req, res) => {
+    app.post(CANCELAMENTO, autenticar, async (req, res) => {
         try {
-            const { cpfPaciente, matriculaProfissional, dataConsulta, horario, observacao } = req.body;
+            const { cpfPaciente, dataConsulta, horario, observacao } = req.body;
 
-            const validacao = await validarCancelamento({ cpfPaciente, matriculaProfissional, dataConsulta, horario });
+            const validacao = await validarCancelamento({ cpfPaciente, dataConsulta, horario });
+
+            const usuarioLogado = req.usuario;
 
             if (!validacao.valido) {
                 return res.status(validacao.status).json({ mensagem: validacao.mensagem });
@@ -66,15 +67,10 @@ module.exports = (app) => {
                 return res.status(atividadePaciente.status).json({ mensagem: atividadePaciente.mensagem });
             }
 
-            const profissional_id = await servicosIdentidade.buscarProfissionalPorMatricula(matriculaProfissional);
-            if (!profissional_id || profissional_id.length === 0) {
-                return res.status(404).json({ mensagem: 'Profissional não encontrado.' });
-            }
-
             const dataFormatada = funcoesGerais.formatarData(dataConsulta);
             const filtros = {
                 paciente_id: paciente_id[0].id,
-                profissional_id: profissional_id[0].id,
+                profissional_id: usuarioLogado.id,
                 data: dataFormatada.data,
                 horario: horario
             };
@@ -87,7 +83,7 @@ module.exports = (app) => {
             const resultado = await servicos.cancelarConsulta(
                 paciente_id[0].id,
                 consulta[0].id,
-                profissional_id[0].id,
+                usuarioLogado.id,
                 observacao
             );
 

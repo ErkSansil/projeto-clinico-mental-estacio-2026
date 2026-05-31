@@ -88,29 +88,41 @@ function normalizarTexto(valor = '') {
 	return String(valor).trim();
 }
 
-function formatarData(valorData) {
+function formatarData(valorData, padrao = 'brasileiro') {
     const textoData = normalizarTexto(valorData);
 
     if (!textoData) {
         return criarErro(422, 'O campo data é obrigatorio.');
     }
 
-    const partesData = textoData.split('/');
+    const partesData = textoData.split(/-|\//);
 
-    let dataConvertida;
+    let dia, mes, ano;
+    const [primeira, segunda, terceira] = partesData;
 
-    if (partesData.length === 3) {
-        const [dia, mes, ano] = partesData;
-        dataConvertida = new Date(`${ano}-${mes}-${dia}`);
+    if (primeira.length === 4) {
+        ano = primeira;
+        mes = segunda;
+        dia = terceira;
+    } else {
+        dia = primeira;
+        mes = segunda;
+        ano = terceira;
     }
+
+    const dataConvertida = new Date(parseInt(ano), parseInt(mes) - 1, parseInt(dia));
 
     if (Number.isNaN(dataConvertida.getTime())) {
         return criarErro(400, 'Formato de data invalido.');
     }
 
+    const dataFormatada = padrao === 'iso' 
+        ? `${String(ano).padStart(4, '0')}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`
+        : dataConvertida.toLocaleDateString('pt-BR');
+
     return {
         valido: true,
-        data: dataConvertida.toISOString().split('T')[0]
+        data: dataFormatada
     };
 }
 

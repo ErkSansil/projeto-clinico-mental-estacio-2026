@@ -1,4 +1,5 @@
 const REAGENDAMENTO = '/agendamento/reagendamento';
+const {autenticar, autorizar} = require('../../middleware/auth.js');
 
 const db = require('../../db/metodosBd.js');
 const conexao = require('../../db/conexao.js');
@@ -8,25 +9,23 @@ const servicosIdentidade = require('../identidade/servicos.js');
 const consulta = require('./consulta.js');
 
 module.exports = (app) => {
-    app.post(REAGENDAMENTO, async (req, res) => {
+    app.post(REAGENDAMENTO, autenticar, async (req, res) => {
         try {
-            const { id, novaData, novoHorario, motivo } = req.body;
+            const { consulta_id, novaData, novoHorario, motivo } = req.body;
 
-            const camposObrigatorios = ['id', 'novaData', 'novoHorario', 'motivo'];
+            const usuarioLogado = req.usuario;
+
+            const camposObrigatorios = ['consulta_id', 'novaData', 'novoHorario', 'motivo'];
             const validacaoCampos = funcoesGerais.validarCamposObrigatorios(camposObrigatorios, req.body);
 
             if (!validacaoCampos.valido) {
                 return res.status(validacaoCampos.status).json({ mensagem: validacaoCampos.mensagem });
             }
 
-            const dataFormatada = funcoesGerais.formatarData(novaData);
+            const dataFormatada = funcoesGerais.formatarData(novaData, 'iso').data;
 
-            if (!dataFormatada.valido) {
+            if (!dataFormatada) {
                 return res.status(dataFormatada.status).json({ mensagem: dataFormatada.mensagem });
-            }
-            
-            if (!funcoesGerais.validarData(dataFormatada).valido) {
-                return res.status(funcoesGerais.validarData(dataFormatada).status).json({ mensagem: funcoesGerais.validarData(dataFormatada).mensagem });
             }
 
             const validacaoHorarioFixo = funcoesGerais.validarHorarioFixo(novoHorario);
@@ -41,7 +40,7 @@ module.exports = (app) => {
                 return res.status(validacaoDiaClinica.status).json({ mensagem: validacaoDiaClinica.mensagem });
             }
 
-            const consultaMarcada = await db.selecionar('consulta', ['*'] , { id });
+            const consultaMarcada = await servicos.buscarConsultaPorId(consulta_id);
             
             if (!consultaMarcada || consultaMarcada.length === 0) {
                 const erro = funcoesGerais.criarErro(404, 'Consulta não encontrada.');
@@ -55,26 +54,24 @@ module.exports = (app) => {
             }
 
             const verificarOcupacao = await servicos.verificarConsultaOcupada({
-                salaId: consultaMarcada[0].sala_id,
-                data: dataFormatada.data,
+                sala_id: consultaMarcada[0].sala_id,
+                data: dataFormatada,
                 horario: novoHorario
             });
 
-            if (!verificarOcupacao.ocupada) {
-                const erro = funcoesGerais.criarErro(400, 'A consulta não está disponível para o novo horário.');
-                return res.status(erro.status).json({ mensagem: erro.mensagem });
+            if (!verificarOcupacao.valido) {
+                const erro = funcoesGerais.criarErro(verificarOcupacao.status, verificarOcupacao.mensagem);
+                return res.status(erro.status).json({status: erro.status, mensagem: erro.mensagem });
             }
 
             const dados = {
                 id: funcoesGerais.gerarNumero11Digitos(),
                 consulta_id: consultaMarcada[0].id,
-                cadastroUsuario_id: consultaMarcada[0].profissional_id,
-                nova_data: dataFormatada.data,
-                novo_horario: novoHorario,
+                cadastroUsuario_id: usuarioLogado.id,
+                novaData: dataFormatada,
+                novoHorario: novoHorario,
                 motivo: motivo,
                 statusSolicitacao: 'pendente',
-                aprovadoUsuario_id: null,
-                dataAprovacao: null
             }
 
            const reagendamento = await servicos.reagendarConsulta(dados);
@@ -90,25 +87,18 @@ module.exports = (app) => {
             res.status(erro.status).json({ mensagem: erro.mensagem + 'Detalhes: ' + error.message });
         }
     });
-    app.put(REAGENDAMENTO, async (req, res) => {
+    app.put(REAGENDAMENTO, autenticar, autorizar('admin'), async (req, res) => {
         try {
-            const { id, statusSolicitacao, motivo, sala } = req.body;
+            const { id, statusSolicitacao, motivo } = req.query;
 
-            const validarCampos = funcoesGerais.validarCamposObrigatorios(['id', 'statusSolicitacao'], req.body);
+            const usuarioId = req.usuario.id;
+
+            const validarCampos = funcoesGerais.validarCamposObrigatorios(['id', 'statusSolicitacao'], req.query);
 
             if (!validarCampos.valido) {
                 return res.status(validarCampos.status).json({ 
                     status: validarCampos.status, 
                     mensagem: validarCampos.mensagem 
-                });
-            }
-
-            const sala_id = servicosIdentidade.buscarSalaPorNumero(sala);
-
-            if (!sala_id || sala_id.length === 0) {
-                return res.status(404).json({ 
-                    status: 404, 
-                    mensagem: 'Sala não encontrada.' 
                 });
             }
 
@@ -130,10 +120,12 @@ module.exports = (app) => {
                 });
             }
 
+            const consultaMarcada = await servicos.buscarConsultaPorId(reagendamento[0].consulta_id);
+
             const verificaOcupacao = await servicos.verificarConsultaOcupada({
-                salaId: sala_id,
-                data: reagendamento[0].nova_data,
-                horario: reagendamento[0].novo_horario
+                sala_id: consultaMarcada[0].sala_id,
+                data: reagendamento[0].novaData,
+                horario: reagendamento[0].novoHorario
             });
 
             if (verificaOcupacao.ocupada && statusNormalizado === 'aprovado') {
@@ -143,12 +135,12 @@ module.exports = (app) => {
                 });
             }
 
-            await servicos.atualizarStatusReagendamento(id, statusNormalizado, motivo);
+            await servicos.atualizarStatusReagendamento(id, statusNormalizado, motivo, usuarioId);
 
             if (statusNormalizado === 'aprovado') {
-                await servicos.atualizarConsulta(reagendamento[0].consulta_id, {
-                    data: reagendamento[0].nova_data,
-                    horario: reagendamento[0].novo_horario
+                await servicos.atualizarConsulta(consultaMarcada[0].id, {
+                    data: reagendamento[0].novaData,
+                    horario: reagendamento[0].novoHorario
                 });
             }
 
@@ -161,7 +153,7 @@ module.exports = (app) => {
             res.status(erro.status).json({ status: erro.status, mensagem: erro.mensagem + 'Detalhes: ' + error.message });
         }
     });
-    app.get(REAGENDAMENTO + '/pendencias', async (req, res) => {
+    app.get(REAGENDAMENTO + '/retorno', autenticar, autorizar('admin'), async (req, res) => {
         try {
             const { filtro } = req.query;
 

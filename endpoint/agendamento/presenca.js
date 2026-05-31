@@ -1,4 +1,5 @@
 const PRESENCA = '/agendamento/presenca';
+const {autenticar} = require('../../middleware/auth.js');
 
 const funcoesGerais = require('../auxiliar/funcoesGerais.js');
 const servicos = require('./servicos.js');
@@ -7,8 +8,7 @@ const {autenticarToken} = require('../../middleware/auth.js');
 
 async function validarPresenca(payload = {}) {
     const cpfPacienteNormalizado = String(payload.cpfPaciente).trim();
-    const matriculaProfissionalNormalizada = String(payload.matriculaProfissional).trim();
-    const camposObrigatorios = ['cpfPaciente', 'matriculaProfissional', 'dataConsulta', 'horario', 'presenca'];
+    const camposObrigatorios = ['cpfPaciente', 'dataConsulta', 'horario', 'presenca'];
 
     if (!['presente', 'ausente'].includes(payload.presenca)) {
         return {
@@ -48,15 +48,29 @@ async function validarPresenca(payload = {}) {
         return validacaoDiaClinica;
     }
 
+    const paciente_id = await servicosIdentidade.buscarPacientePorCpf(cpfPacienteNormalizado);
+
+    const validarUsuarioAtivo = await servicosIdentidade.verificarAtividadePaciente(paciente_id[0].id);
+
+    if (!validarUsuarioAtivo.valido) {
+        return {
+            valido: false,
+            status: validarUsuarioAtivo.status,
+            mensagem: validarUsuarioAtivo.mensagem
+        };
+    }
+
     return { valido: true };
 }
 
 module.exports = (app) => {
-    app.post(PRESENCA, async (req, res) => {
+    app.post(PRESENCA, autenticar, async (req, res) => {
         try {
-            const { cpfPaciente, matriculaProfissional, dataConsulta, horario, presenca, observacao} = req.body;
+            const { cpfPaciente, dataConsulta, horario, presenca, observacao} = req.body;
 
-            const validacao = await validarPresenca({ cpfPaciente, matriculaProfissional, dataConsulta, horario, presenca, observacao });
+            const usuarioLogado = req.usuario;
+            
+            const validacao = await validarPresenca({ cpfPaciente, dataConsulta, horario, presenca, observacao });
 
             if (!validacao.valido) {
                 return res.status(validacao.status).json({ status: validacao.status, mensagem: validacao.mensagem });
@@ -68,13 +82,7 @@ module.exports = (app) => {
                 return res.status(404).json({ status: 404, mensagem: 'Paciente não encontrado.' });
             }
 
-            const profissional_id = await servicosIdentidade.buscarProfissionalPorMatricula(matriculaProfissional);
-
-            if (!profissional_id || profissional_id.length === 0) {
-                return res.status(404).json({ status: 404, mensagem: 'Profissional não encontrado.' });
-            }
-
-            const consultaMarcada = await servicos.buscarConsultas({ paciente_id: paciente_id[0].id, profissional_id: profissional_id[0].id, data: dataConsulta, horario });
+            const consultaMarcada = await servicos.buscarConsultas({ paciente_id: paciente_id[0].id, profissional_id: usuarioLogado.id, data: dataConsulta, horario, status: 'agendada' });
 
             if (!consultaMarcada || consultaMarcada.length === 0) {
                 return res.status(404).json({ status: 404, mensagem: 'Consulta não encontrada para os dados fornecidos.' });
@@ -84,13 +92,13 @@ module.exports = (app) => {
                 paciente_id: paciente_id[0].id,
                 consulta_id: consultaMarcada[0].id,
                 presenca: presenca,
-                profissional_id: profissional_id[0].id,
+                profissional_id: usuarioLogado.id,
                 observacao: observacao || null
             }
 
-            await servicos.registrarPresenca(dados);
+            const resultado = await servicos.registrarPresenca(dados);
 
-            res.status(200).json({ status: 200, mensagem: 'Presença registrada com sucesso.' });
+            res.status(200).json({ status: 200, mensagem: resultado.mensagem });
         } catch (error) {
             console.error('Erro ao processar presença:', error);
             res.status(500).json({ status: 500, mensagem: error.message });

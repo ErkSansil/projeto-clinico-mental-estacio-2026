@@ -2,24 +2,22 @@ const db = require('../../db/metodosBd.js');
 const conexao = require('../../db/conexao.js');
 const funcoesGerais = require('../auxiliar/funcoesGerais.js');
 
-async function verificarConsultaOcupada({ salaId, data, horario }) {
-	const dataFormatada = funcoesGerais.formatarData(data);
-
-	if (!dataFormatada.valido) {
-		return dataFormatada;
-	}
-
+async function verificarConsultaOcupada({ sala_id, data, horario }) {
 	const consultas = await db.selecionar('consulta', ['id'], {
-		sala_id: String(salaId).trim(),
-		data: dataFormatada.data,
-		horario: funcoesGerais.normalizarTexto(horario)
+		sala_id: String(sala_id).trim(),
+		data: data,
+		horario: horario + ':00'
 	});
 
-	return {
-		valido: true,
-		ocupada: consultas.length > 0,
-		data: dataFormatada.data
-	};
+	if (consultas.length > 0) {
+		return {
+			valido: false,
+			status: 400,
+			mensagem: 'A consulta não está disponível para o horário e sala informados.'
+		}
+	}
+
+	return { valido: true };
 }
 
 function gerarDatasRecorrentes(dataInicial, quantidade = 10, intervaloSemanas = 1) {
@@ -47,7 +45,7 @@ function gerarDatasRecorrentes(dataInicial, quantidade = 10, intervaloSemanas = 
 	};
 }
 
-async function criarConsultasRecorrentes(pacienteId, profissionalId, salaId, data, horario, observacao = '', quantidade = 10, intervaloSemanas = 1) {
+async function criarConsultasRecorrentes(pacienteId, profissionalId, sala_id, data, horario, observacao = '', quantidade = 10, intervaloSemanas = 1) {
 	const datasGeradas = gerarDatasRecorrentes(data, quantidade, intervaloSemanas);
 
 	if (!datasGeradas.valido) {
@@ -62,7 +60,7 @@ async function criarConsultasRecorrentes(pacienteId, profissionalId, salaId, dat
 		for (const dataConsulta of datasGeradas.datas) {
 			const [consultaExistente] = await conexaoAtiva.execute(
 				'SELECT id FROM consulta WHERE sala_id = ? AND data = ? AND horario = ?',
-				[String(salaId).trim(), dataConsulta, funcoesGerais.normalizarTexto(horario)]
+				[String(sala_id).trim(), dataConsulta, funcoesGerais.normalizarTexto(horario)]
 			);
 
 			if (consultaExistente.length > 0) {
@@ -75,7 +73,7 @@ async function criarConsultasRecorrentes(pacienteId, profissionalId, salaId, dat
 					funcoesGerais.gerarNumero11Digitos(),
 					String(pacienteId).trim(),
 					String(profissionalId).trim(),
-					String(salaId).trim(),
+					String(sala_id).trim(),
 					dataConsulta,
 					funcoesGerais.normalizarTexto(horario),
 					funcoesGerais.normalizarTexto(observacao),
@@ -107,6 +105,14 @@ async function buscarConsultas(filtros) {
 	const camposPermitidos = ['paciente_id', 'profissional_id', 'sala_id', 'data', 'horario', 'status'];
 	const condicoesBusca = [];
 	const valores = [];
+
+	if (filtros.data) {
+		filtros.data = funcoesGerais.formatarData(filtros.data, 'iso').data;
+	}
+	
+	if (filtros.horario) {
+		filtros.horario = filtros.horario + ':00';
+	}
 
 	for (const [campo, valor] of Object.entries(filtros)) {
 		if (valor && camposPermitidos.includes(campo)) {
@@ -152,27 +158,15 @@ async function reagendarConsulta(dados) {
 }
 
 async function cancelarConsulta(pacienteId, consultaId, profissionalId, observacao = null) {
-	// 1. Atualizar status da consulta
 	await db.atualizar('consulta', 
 		{ status: 'cancelada' }, 
 		{ id: consultaId }
 	);
 
-	await db.inserir('controlePresenca', {
-		id: funcoesGerais.gerarNumero11Digitos(),
-		paciente_id: pacienteId,
-		consulta_id: consultaId,
-		presente: 0,
-		observacao: observacao || null,
-		registrado_por: profissionalId
-	});
-
-	// 3. Contar cancelamentos
 	const resultado = await contagemCancelamentos(pacienteId);
 
 	const quantidadeCancelamentos = resultado[0].total;
 
-	// 4. Se atingiu limite, bloquear paciente
 	if (quantidadeCancelamentos >= 3) {
 		await db.atualizar('paciente', 
 			{ ativo: 0 }, 
@@ -194,7 +188,7 @@ async function cancelarConsulta(pacienteId, consultaId, profissionalId, observac
 }
 
 async function registrarPresenca(dados) {
-	dados['presente'] = dados.presenca === 'presente' 
+	dados['presenca'] = dados.presenca === 'presente' 
 		? 1 
 		: 0;
 
@@ -203,12 +197,12 @@ async function registrarPresenca(dados) {
 		id: funcoesGerais.gerarNumero11Digitos(),
 		paciente_id: dados.paciente_id,
 		consulta_id: dados.consulta_id,
-		presente: dados.presente,
+		presente: dados.presenca,
 		observacao: dados.observacao || null,
 		registrado_por: dados.profissional_id
 	});
 
-	if (dados.presente === 0) {
+	if (dados.presenca === 0) {
 		const resultado = await cancelarConsulta(dados.paciente_id, dados.consulta_id, dados.profissional_id, 'paciente ausente');
 		return {
 			sucesso: true,
@@ -228,16 +222,19 @@ async function registrarPresenca(dados) {
 	};
 }
 
-async function contagemCancelamentos(pacienteId) {
+async function contagemCancelamentos(paciente_id) {
 	const resultado = await db.executarQuery(
-		'SELECT COUNT(*) AS total FROM controlePresenca WHERE paciente_id = ? AND presente = ?',
-		[String(pacienteId).trim(), 0]
+		`SELECT 
+            (SELECT COUNT(*) FROM consulta WHERE paciente_id = ? AND status = 'cancelada') +
+            (SELECT COUNT(*) FROM controlePresenca WHERE paciente_id = ? AND presente = 0)
+            AS total`,
+		[String(paciente_id).trim(), String(paciente_id).trim()]
 	);
 	return resultado;
 }
 
-async function buscarReagendamentoPorId(consulta_id) {
-	return await db.selecionar('pendenciaConsulta', ['*'], { id: consulta_id });
+async function buscarReagendamentoPorId(id) {
+	return await db.selecionar('pendenciaConsulta', ['*'], { id: id });
 }
 
 async function atualizarStatusReagendamento(id, status, motivo = null, aprovadoUsuario_id) {
@@ -252,7 +249,7 @@ async function atualizarConsulta(consulta_id, dados) {
 	await db.atualizar('consulta', dados, { id: consulta_id });
 }
 
-async function buscarPendenciasReagendamento(filtro = null) {
+async function buscarPendenciasReagendamento(filtro = 'pendente') {
 	
     if (!filtro) {
         return await db.selecionar('pendenciaConsulta', ['*']);
@@ -268,6 +265,10 @@ async function buscarPendenciasReagendamento(filtro = null) {
     return await db.selecionar('pendenciaConsulta', ['*'], { statusSolicitacao: filtroNormalizado });
 }
 
+async function buscarConsultaPorId(consulta_id) {
+	return await db.selecionar('consulta', ['*'], { id: consulta_id });
+}
+
 module.exports = {
 	verificarConsultaOcupada,
 	gerarDatasRecorrentes,
@@ -279,5 +280,6 @@ module.exports = {
 	buscarReagendamentoPorId,
 	atualizarStatusReagendamento,
 	atualizarConsulta,
-	buscarPendenciasReagendamento
+	buscarPendenciasReagendamento,
+	buscarConsultaPorId
 };
