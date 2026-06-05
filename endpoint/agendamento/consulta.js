@@ -74,7 +74,7 @@ module.exports = (app) => {
                 return res.status(erro.status).json({ status: erro.status, mensagem: erro.mensagem });
             }
 
-            dataFormatada = funcoesGerais.formatarData(data, 'iso').data;
+            const dataFormatada = funcoesGerais.formatarData(data, 'iso').data;
 
             const verificacaoConsulta = await servicos.verificarConsultaOcupada({
                 sala_id: sala_id[0].id,

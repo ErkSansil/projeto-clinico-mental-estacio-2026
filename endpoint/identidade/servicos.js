@@ -78,7 +78,7 @@ async function cadastrarUsuario(tipo, dados) {
             senha: funcoesGerais.gerarHashSenha(dados.senha),
             celular: dados.celular,
             endereco: dados.endereco,
-            dataNascimento: funcoesGerais.formatarData(dados.dataNascimento).data,
+            dataNascimento: funcoesGerais.formatarData(dados.dataNascimento, 'iso').data,
             responsavelNome: dados.responsavelNome || null,
             responsavelContato: dados.responsavelContato || null,
             ativo: 1

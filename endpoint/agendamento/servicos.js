@@ -224,10 +224,12 @@ async function registrarPresenca(dados) {
 
 async function contagemCancelamentos(paciente_id) {
 	const resultado = await db.executarQuery(
-		`SELECT 
-            (SELECT COUNT(*) FROM consulta WHERE paciente_id = ? AND status = 'cancelada') +
-            (SELECT COUNT(*) FROM controlePresenca WHERE paciente_id = ? AND presente = 0)
-            AS total`,
+ 		`SELECT COUNT(DISTINCT consulta_id) AS total
+ 		 FROM (
+ 			 SELECT id AS consulta_id FROM consulta WHERE paciente_id = ? AND status = 'cancelada'
+ 			 UNION
+ 			 SELECT consulta_id FROM controlePresenca WHERE paciente_id = ? AND presente = 0
+ 		 ) cancelamentos`,
 		[String(paciente_id).trim(), String(paciente_id).trim()]
 	);
 	return resultado;

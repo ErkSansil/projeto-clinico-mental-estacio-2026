@@ -67,13 +67,13 @@ function validarMatricula(matricula) {
 }
 
 function validarData(data) {
-    const dataFormatada = formatarData(data);
+    const dataFormatada = formatarData(data, 'iso');
     
     if (!dataFormatada.valido) {
         return dataFormatada;
     }
 
-    const dataParsed = new Date(dataFormatada.data);
+    const dataParsed = new Date(dataFormatada.data + 'T00:00:00');
     const dataAtual = new Date();
     dataAtual.setHours(0, 0, 0, 0);
 
@@ -137,7 +137,7 @@ function validarHorarioFixo(horario) {
 }
 
 function validarDiaClinica(data, horario) {
-    const dataFormatada = formatarData(data);
+    const dataFormatada = formatarData(data, 'iso');
     
     if (!dataFormatada.valido) {
         return dataFormatada;

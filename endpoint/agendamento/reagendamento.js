@@ -87,7 +87,7 @@ module.exports = (app) => {
             res.status(erro.status).json({ mensagem: erro.mensagem + 'Detalhes: ' + error.message });
         }
     });
-    app.put(REAGENDAMENTO, autenticar, autorizar('admin'), async (req, res) => {
+    app.patch(REAGENDAMENTO, autenticar, autorizar('admin'), async (req, res) => {
         try {
             const { id, statusSolicitacao, motivo } = req.query;
 
@@ -128,7 +128,7 @@ module.exports = (app) => {
                 horario: reagendamento[0].novoHorario
             });
 
-            if (verificaOcupacao.ocupada && statusNormalizado === 'aprovado') {
+            if (verificaOcupacao.valido && statusNormalizado === 'aprovado') {
                 return res.status(400).json({ 
                     status: 400, 
                     mensagem: 'A consulta não está disponível para o novo horário e sala.' 

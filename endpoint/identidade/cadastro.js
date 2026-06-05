@@ -24,9 +24,9 @@ async function validarCadastro(payload = {}) {
 		? [...camposObrigatorios, 'endereco', 'dataNascimento'] 
 		: [...camposObrigatorios, 'matricula'];
 
-	const dataFormatada = funcoesGerais.formatarData(payload.dataNascimento);
+	const dataFormatada = funcoesGerais.formatarData(payload.dataNascimento, 'iso');
 	
-	const dataNascimento = new Date(dataFormatada.data);
+	const dataNascimento = new Date(dataFormatada.data + 'T00:00:00');
 	const dataAtual = new Date();
 	
 	if (dataNascimento > dataAtual) {
@@ -88,7 +88,7 @@ module.exports = (app) => {
 			const validacao = await validarCadastro(req.body);
 
 			if (!validacao.valido) {
-				return res.status(validacao.status).json({ erro: validacao.mensagem });
+				return res.status(validacao.status).json({status: validacao.status, mensagem: validacao.mensagem });
 			}
 
 			await servicosIdentidade.cadastrarUsuario(req.body.tipo, req.body);
@@ -103,7 +103,7 @@ module.exports = (app) => {
 			res.status(500).json({ erro: 'Erro interno ao processar cadastro: ' + error.message });
 		}
 	});
-	app.put(CADASTRO_PATH, autenticar, autorizar('admin'), async (req, res) => {
+	app.patch(CADASTRO_PATH, autenticar, autorizar('admin'), async (req, res) => {
 		try {
 			const { cpfPaciente, atividade } = req.query;
 

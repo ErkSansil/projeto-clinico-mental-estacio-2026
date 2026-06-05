@@ -50,6 +50,10 @@ async function validarPresenca(payload = {}) {
 
     const paciente_id = await servicosIdentidade.buscarPacientePorCpf(cpfPacienteNormalizado);
 
+    if (!paciente_id || paciente_id.length === 0) {
+         return funcoesGerais.criarErro(404, 'Paciente não encontrado.');
+     }
+
     const validarUsuarioAtivo = await servicosIdentidade.verificarAtividadePaciente(paciente_id[0].id);
 
     if (!validarUsuarioAtivo.valido) {

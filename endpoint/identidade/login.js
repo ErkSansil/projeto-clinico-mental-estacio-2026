@@ -51,7 +51,7 @@ module.exports = (app) => {
                 return res.status(validacao.status).json({ mensagem: validacao.mensagem });
             }
 
-            identificacao = matriculaProfissional 
+            const identificacao = matriculaProfissional 
                 ? { matricula: String(matriculaProfissional).trim() } 
                 : { cpf: String(cpf).trim() };
 
