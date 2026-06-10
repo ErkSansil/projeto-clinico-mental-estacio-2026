@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\erick.s\\\\Documents\\\\ClinicaSEP\" -Recurse -Force)",
+      "Bash(Select-Object -Property FullName, PSIsContainer)",
+      "Bash(Sort-Object FullName)",
+      "Bash(Format-Table -AutoSize)",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\erick.s\\\\Documents\\\\ClinicaSEP\" -Depth 0 | Where-Object { $_.PSIsContainer -eq $false } | Select-Object Name)",
+      "Bash(grep -E \"^\\(express|bcrypt|jsonwebtoken|cors\\)$\")",
+      "PowerShell(New-Item -ItemType Directory -Force \"C:\\\\Users\\\\erick.s\\\\Documents\\\\ClinicaSEP\\\\FrontEnd\\\\contexts\")",
+      "Read(//mnt/c/Users/erick.s/Documents/ClinicaSEP/**)",
+      "Bash(node_modules/.bin/tsc --noEmit)",
+      "Bash(node -e \"const bcrypt = require\\('bcrypt'\\); bcrypt.hash\\('Admin1234', 10\\).then\\(h => console.log\\(h\\)\\);\")",
+      "Bash(Remove-Item \"C:\\\\Users\\\\erick.s\\\\Documents\\\\ClinicaSEP\\\\db\\\\criar-admin.js\" -Force)"
+    ]
+  }
+}
