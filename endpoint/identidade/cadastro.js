@@ -145,7 +145,7 @@ module.exports = (app) => {
 	// usada pelo frontend para popular dropdowns e listas de seleção
 	app.get('/identidade/pacientes', autenticar, async (req, res) => {
 		try {
-			const pacientes = await db.selecionar('paciente', ['id', 'cpf', 'nome', 'celular', 'email', 'ativo'], {});
+			const pacientes = await db.selecionar('paciente', ['id', 'cpf', 'nome', 'celular', 'email', 'ativo']);
 			res.status(200).json({ status: 200, pacientes });
 		} catch (error) {
 			console.error('Erro ao listar pacientes:', error);
@@ -247,6 +247,22 @@ module.exports = (app) => {
 		} catch (error) {
 			console.error('Erro ao listar profissionais:', error);
 			res.status(500).json({ erro: 'Erro interno ao listar profissionais: ' + error.message });
+		}
+	});
+	app.get('/identidade/profissional/perfil', autenticar, async (req, res) => {
+		try {			
+			const usuarioId = req.usuario.id;
+
+			const profissional = await servicosIdentidade.buscarProfissionalPorId(usuarioId);
+
+			if (!profissional || profissional.length === 0) {
+				return res.status(404).json({ status: 404, mensagem: 'Profissional não encontrado.' });
+			}
+
+			return res.status(200).json({ status: 200, dados: profissional});
+		} catch (error) {
+			console.error('Erro ao buscar perfil do profissional:', error);
+			res.status(500).json({ erro: 'Erro interno: ' + error.message });
 		}
 	});
 };

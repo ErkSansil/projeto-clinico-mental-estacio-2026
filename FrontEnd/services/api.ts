@@ -340,3 +340,16 @@ export async function registrarPresenca(
   // retorna o corpo da resposta junto com o status HTTP
   return { status: resposta.status, dados: await resposta.json() };
 }
+
+// busca o perfil do profissional logado
+// requer autenticação JWT
+export async function buscarPerfilProfissional(token: string) {
+  const resposta = await fetch(`${API_URL}/identidade/profissional/perfil`, {
+    method: 'GET',
+    headers: montarHeaders(token),
+  });
+
+  // retorna o corpo da resposta junto com o status HTTP
+  return { status: resposta.status, dados: await resposta.json() };
+}
+

@@ -121,12 +121,16 @@ module.exports = (app) => {
     app.get(CONSULTA, autenticar, async (req, res) => {
         try {
             const { cpfPaciente, matriculaProfissional, data } = req.query;
+            
+            const usuarioLogado = req.usuario;
 
-            if (!cpfPaciente && !matriculaProfissional && !data) {
+            const usuario_id = usuarioLogado.id;
+
+            if (!cpfPaciente && !matriculaProfissional && !data && !usuario_id) {
                 return res.status(400).json({ status: 400, mensagem: 'Pelo menos um filtro (cpfPaciente, matriculaProfissional ou data) deve ser fornecido.' });
             }
 
-            const usuarioLogado = req.usuario;
+            let matriculaProfissionalVerificacao = String(matriculaProfissional).trim() ? String(matriculaProfissional).trim() : await servicosIdentidade.buscarProfissionalPorId(usuario_id).matricula;
 
             const filtros = {};
 
@@ -138,7 +142,7 @@ module.exports = (app) => {
                 filtros.paciente_id = paciente_id[0].id;
             }
 
-            if (matriculaProfissional) {
+            if (matriculaProfissionalVerificacao) {
                 filtros.profissional_id = usuarioLogado.id;
             }
 

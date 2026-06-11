@@ -1,24 +1,17 @@
 // arquivo app/faltas.tsx
 
 // importa componentes do React Native
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 // componentes nativos do React são usados nesta tela
 import {
-  // barra de rolagem na tela
   ScrollView,
-  // usado para criar estilos na tela
   StyleSheet,
-  // componente de texto
   Text,
-  // botão com clique e efeito ao toque
   TouchableOpacity,
-  // componente base de estrutura e layout
   View,
-  // hook que pega largura e altura da tela em tempo real
-  // usado para responsividade entre mobile e desktop 
   useWindowDimensions,
-
+  ActivityIndicator
 } from 'react-native';
 
 // navegação
@@ -26,34 +19,71 @@ import { useRouter } from 'expo-router';
 
 // componentes do projeto
 import { BrandHeader, Screen, SectionCard } from '@/components/clinic-ui';
-
-// lista simulada de faltas (como se viesse do backend) :contentReference[oaicite:0]{index=0}
-const faltas = [
-  {
-    paciente: 'Ana Silva',
-    presencas: 6,
-    faltas: 2,
-    ultimaConsulta: '10/06/2026',
-    observacao: 'Faltou sem aviso prévio.',
-  },
-  {
-    paciente: 'Pedro Henrique',
-    presencas: 4,
-    faltas: 3,
-    ultimaConsulta: '11/06/2026',
-    observacao: 'Necessita acompanhamento mais próximo.',
-  },
-  {
-    paciente: 'Julia Alves',
-    presencas: 8,
-    faltas: 1,
-    ultimaConsulta: '12/06/2026',
-    observacao: 'Boa frequência nas sessões.',
-  },
-];
+import { useAuth } from '@/contexts/AuthContext';
+import { exportarRelatorio } from '@/services/api';
 
 // tela de controle de faltas
 export default function FaltasScreen() {
+  const { token } = useAuth();
+
+  const [faltas, setFaltas] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchFaltas() {
+      if (!token) return;
+      try {
+        const response = await exportarRelatorio(token);
+        if (response.status === 200 && response.dados.atendimentos) {
+          const pacientesMap: Record<string, any> = {};
+
+          response.dados.atendimentos.forEach((atendimento: any) => {
+            const cpf = atendimento.cpf_paciente;
+            if (!cpf) return;
+
+            if (!pacientesMap[cpf]) {
+              pacientesMap[cpf] = {
+                paciente: atendimento.paciente,
+                presencas: 0,
+                faltas: 0,
+                ultimaConsulta: '',
+                datas: [],
+                observacao: 'Em acompanhamento'
+              };
+            }
+
+            if (atendimento.presenca === 'Presente') {
+              pacientesMap[cpf].presencas++;
+            } else if (atendimento.presenca === 'Ausente') {
+              pacientesMap[cpf].faltas++;
+            }
+
+            pacientesMap[cpf].datas.push(atendimento.data);
+          });
+
+          const faltasData = Object.values(pacientesMap).map(p => {
+            // Ordenar datas (assumindo formato DD/MM/YYYY ou similar)
+            // Aqui fazemos algo simples pegando a última na lista caso esteja já ordenada,
+            // O ideal seria fazer sort, mas vamos pegar a maior (última no array que vem desc na API)
+            p.ultimaConsulta = p.datas.length > 0 ? p.datas[0] : 'N/A';
+            if (p.faltas > 2) p.observacao = 'Necessita acompanhamento mais próximo.';
+            else if (p.faltas === 0) p.observacao = 'Boa frequência nas sessões.';
+            else p.observacao = 'Possui faltas registradas.';
+            return p;
+          });
+
+          setFaltas(faltasData.filter(p => p.faltas > 0 || p.presencas > 0)); // Mostra quem tem historico
+        }
+      } catch (error) {
+        console.error("Erro ao buscar relatorio de faltas:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchFaltas();
+  }, [token]);
+
+  // verificando tipo de dispositivo
 
   // pegando largura da tela pra responsividade
   const { width } = useWindowDimensions();

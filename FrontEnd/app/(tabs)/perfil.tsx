@@ -1,7 +1,7 @@
 // arquivo app/(tabs)/perfil.tsx
 
 // importação principal do React, pois é necessário para criar componentes React Native.
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 // componentes nativos do React são usados nesta tela
 import {
@@ -18,7 +18,7 @@ import {
   // hook que pega largura e altura da tela em tempo real
   // usado para responsividade entre mobile e desktop 
   useWindowDimensions,
-
+  ActivityIndicator,
 } from 'react-native';
 
 // biblioteca de ícones do Expo
@@ -31,6 +31,9 @@ import { useRouter } from 'expo-router';
 // componente de fundo degradê
 // usado para deixar o background mais moderno e suave
 import { LinearGradient } from 'expo-linear-gradient';
+
+import { useAuth } from '../../contexts/AuthContext';
+import { buscarPerfilProfissional } from '../../services/api';
 
 // menu lateral do desktop, apenas no desktop, no mobile a navegação é diferente.
 // lista de navegação principal da aplicação
@@ -52,6 +55,27 @@ export default function PerfilScreen() {
 
   /// considera se é mobile quando a tela é menor que 900
   const isDesktop = width >= 900;
+
+  const { token, sairLogin } = useAuth();
+  const [perfil, setPerfil] = useState<any>(null);
+  const [carregando, setCarregando] = useState(true);
+
+  useEffect(() => {
+    async function carregarPerfil() {
+      if (!token) return;
+      try {
+        const resposta = await buscarPerfilProfissional(token);
+        if (resposta.status === 200 && resposta.dados?.dados) {
+          setPerfil(resposta.dados.dados);
+        }
+      } catch (error) {
+        console.error('Erro ao carregar perfil:', error);
+      } finally {
+        setCarregando(false);
+      }
+    }
+    carregarPerfil();
+  }, [token]);
 
   return (
     // Coloca um fundo com degradê suave pra dar um visual mais clean
@@ -148,34 +172,40 @@ export default function PerfilScreen() {
               </View>
 
               {/* corpo do card de informações */}
-              <View style={styles.infoBody}>
-
-                {/* bloco do nome */}
-                <View style={styles.infoBlock}>
-                  <Text style={styles.label}>Nome</Text>
-                  <Text style={styles.value}>Paulo Oliveira</Text>
+              {carregando ? (
+                <View style={{ padding: 20, alignItems: 'center' }}>
+                  <ActivityIndicator size="large" color="#0C706E" />
                 </View>
+              ) : (
+                <View style={styles.infoBody}>
 
-                {/* bloco do perfil de estagiario */}
-                <View style={styles.infoBlock}>
-                  <Text style={styles.label}>Perfil</Text>
-                  <Text style={styles.value}>Estagiário</Text>
-                </View>
+                  {/* bloco do nome */}
+                  <View style={styles.infoBlock}>
+                    <Text style={styles.label}>Nome</Text>
+                    <Text style={styles.value}>{perfil?.nome || 'Não informado'}</Text>
+                  </View>
 
-                {/* bloco do e-mail */}
-                <View style={styles.infoBlock}>
-                  <Text style={styles.label}>E-mail</Text>
-                  <Text style={styles.value}>paulo@sep.com</Text>
-                </View>
+                  {/* bloco do perfil de estagiario */}
+                  <View style={styles.infoBlock}>
+                    <Text style={styles.label}>Perfil</Text>
+                    <Text style={styles.value}>{perfil?.privilegio === 1 ? 'Administrador' : 'Estagiário'}</Text>
+                  </View>
 
-                {/* bloco da função */}
-                <View style={styles.infoBlock}>
-                  <Text style={styles.label}>Função</Text>
-                  <Text style={styles.value}>
-                    Acompanhamento clínico e registros
-                  </Text>
+                  {/* bloco do e-mail */}
+                  <View style={styles.infoBlock}>
+                    <Text style={styles.label}>E-mail</Text>
+                    <Text style={styles.value}>{perfil?.email || 'Não informado'}</Text>
+                  </View>
+
+                  {/* bloco da função */}
+                  <View style={styles.infoBlock}>
+                    <Text style={styles.label}>Função</Text>
+                    <Text style={styles.value}>
+                      {perfil?.privilegio === 1 ? 'Gerenciamento do sistema' : 'Acompanhamento clínico e registros'}
+                    </Text>
+                  </View>
                 </View>
-              </View>
+              )}
             </View>
 
             {/* card de acesso */}
@@ -194,6 +224,7 @@ export default function PerfilScreen() {
                   style={styles.logoutButton}
                   activeOpacity={0.85}
                   onPress={() => {
+                    sairLogin();
                     router.replace('/login');
                   }}
                 >

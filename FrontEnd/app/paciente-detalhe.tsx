@@ -1,7 +1,7 @@
 // arquivo app/paciente-detalhe.tsx
 // aqui eu organizei essa tela e deixei os comentários explicando minha parte do código
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 import {
   ScrollView,
@@ -10,6 +10,7 @@ import {
  TouchableOpacity,
   View,
   useWindowDimensions,
+  ActivityIndicator
 } from 'react-native';
 
 // importando imagem
@@ -17,15 +18,71 @@ import { Image } from 'react-native';
 
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
+
+import { useAuth } from '@/contexts/AuthContext';
+import { buscarDetalhePaciente, buscarHistoricoPaciente } from '@/services/api';
 
 export default function PacienteDetalheScreen() {
 
   // aqui eu pego a largura da tela para adaptar no mobile e desktop
   const { width } = useWindowDimensions();
+  const { cpf } = useLocalSearchParams();
+  const { token } = useAuth();
+
+  const [paciente, setPaciente] = useState<any>(null);
+  const [historico, setHistorico] = useState({ presencas: 0, faltas: 0, total: 0, cancelamentos: 0 });
+  const [loading, setLoading] = useState(true);
 
   // se a tela for maior ou igual a 900, eu considero desktop
   const isDesktop = width >= 900;
+
+  useEffect(() => {
+    async function fetchData() {
+      if (!token || !cpf) {
+        setLoading(false);
+        return;
+      }
+      try {
+        const resDetalhe = await buscarDetalhePaciente(cpf as string, token);
+        if (resDetalhe.status === 200 && resDetalhe.dados.paciente) {
+          setPaciente(resDetalhe.dados.paciente);
+        }
+        
+        const resHistorico = await buscarHistoricoPaciente(cpf as string, token);
+        if (resHistorico.status === 200 && resHistorico.dados.historico) {
+           let p = 0, f = 0, c = 0, t = 0;
+           resHistorico.dados.historico.forEach((h: any) => {
+              if (h.status === 'agendada') t++;
+              else if (h.status === 'concluida') { t++; p++; }
+              else if (h.status === 'cancelada') c++;
+              
+              if (h.presenca === 'Presente') p++;
+              else if (h.presenca === 'Ausente') f++;
+           });
+           setHistorico({ presencas: p, faltas: f, total: resHistorico.dados.historico.length, cancelamentos: c });
+        }
+      } catch (error) {
+        console.error("Erro ao buscar dados do paciente:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchData();
+  }, [cpf, token]);
+
+  const nomeExibicao = paciente?.nome || 'Não informado';
+  const iniciais = nomeExibicao.substring(0, 2).toUpperCase();
+  const idade = paciente?.dataNascimento ? (new Date().getFullYear() - new Date(paciente.dataNascimento).getFullYear()) + ' anos' : 'Idade não informada';
+  const situacao = paciente?.ativo === 1 ? 'Em acompanhamento' : 'Inativo';
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#0C706E" />
+      </View>
+    );
+  }
 
   return (
     <LinearGradient
@@ -204,17 +261,17 @@ export default function PacienteDetalheScreen() {
           <View style={styles.profileCard}>
 
             <View style={styles.avatar}>
-              <Text style={styles.avatarText}>AS</Text>
+              <Text style={styles.avatarText}>{iniciais}</Text>
             </View>
 
             <View style={styles.profileInfo}>
 
               <Text style={styles.patientName}>
-                Ana Silva
+                {nomeExibicao}
               </Text>
 
               <Text style={styles.patientSub}>
-                14 anos • Criança
+                {idade}
               </Text>
 
               <View style={styles.statusBadge}>
@@ -226,7 +283,7 @@ export default function PacienteDetalheScreen() {
                 />
 
                 <Text style={styles.statusText}>
-                  Em acompanhamento
+                  {situacao}
                 </Text>
               </View>
             </View>
@@ -279,10 +336,10 @@ export default function PacienteDetalheScreen() {
                 </Text>
               </View>
 
-              <InfoRow label="Nome" value="Ana Silva" />
-              <InfoRow label="Idade" value="14 anos" />
-              <InfoRow label="Tipo" value="Criança" />
-              <InfoRow label="Responsável" value="Mariana Silva" />
+              <InfoRow label="Nome" value={nomeExibicao} />
+              <InfoRow label="Idade" value={idade} />
+              <InfoRow label="Tipo" value={idade.includes('18') ? 'Adulto' : 'Criança/Adolescente'} />
+              <InfoRow label="Responsável" value={paciente?.responsavelNome || 'N/A'} />
 
               <InfoRow
                 label="Contato"
@@ -307,14 +364,14 @@ export default function PacienteDetalheScreen() {
                 </Text>
               </View>
 
-              <InfoRow label="Atendimentos" value="8" />
-              <InfoRow label="Presenças" value="6" />
-              <InfoRow label="Faltas" value="2" />
-              <InfoRow label="Cancelamentos" value="2" />
+              <InfoRow label="Atendimentos" value={historico.total.toString()} />
+              <InfoRow label="Presenças" value={historico.presencas.toString()} />
+              <InfoRow label="Faltas" value={historico.faltas.toString()} />
+              <InfoRow label="Cancelamentos" value={historico.cancelamentos.toString()} />
 
               <InfoRow
                 label="Situação atual"
-                value="Em acompanhamento"
+                value={situacao}
               />
             </View>
           </View>

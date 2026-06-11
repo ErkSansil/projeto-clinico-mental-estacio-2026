@@ -3,7 +3,7 @@
 // tela de reagendamento seguindo o mesmo padrão visual das outras telas
 
 // importação principal do React, pois é necessário para criar componentes React Native.
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 // componentes nativos do React são usados nesta tela
 import {
@@ -44,10 +44,36 @@ import SelectField from '@/components/ui/selectField';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 // componente para aparecer o calendario no dispositivo mobile
-import { Platform } from 'react-native';
+import { Platform, ActivityIndicator, Alert } from 'react-native';
+import { useAuth } from '@/contexts/AuthContext';
+import { buscarConsultas, solicitarReagendamento } from '@/services/api';
 
 // tela de reagendamento
 export default function ReagendamentoScreen() {
+  const { token } = useAuth();
+  const [consultasOptions, setConsultasOptions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    async function fetchConsultas() {
+      if (!token) return;
+      try {
+        const res = await buscarConsultas({}, token);
+        if (res.status === 200 && res.dados) {
+          const options = res.dados.map((c: any) => ({
+            label: `${c.data} ${c.horario} - ${c.paciente || 'Paciente'}`,
+            value: c.id
+          }));
+          setConsultasOptions(options);
+        }
+      } catch (error) {
+        console.error('Erro', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchConsultas();
+  }, [token]);
+
 
   // pega a largura da tela para adaptar no mobile e desktop
   const { width } = useWindowDimensions();
@@ -56,7 +82,7 @@ export default function ReagendamentoScreen() {
   const isDesktop = width >= 900;
 
   // guarda o nome do paciente digitado
-  const [paciente, setPaciente] = useState('');
+  const [consultaId, setConsultaId] = useState('');
 
   // guarda a nova data digitada
   const [novaData, setNovaData] = useState('');
@@ -297,17 +323,12 @@ export default function ReagendamentoScreen() {
 
               {/* campo do nome do paciente */}
               <View style={[styles.field, isDesktop && styles.fieldDesktop]}>
-
-                {/* label do campo */}
-                <Text style={styles.label}>Paciente</Text>
-
-                {/* input para digitar o nome */}
-                <TextInput
-                  style={styles.input}
-                  placeholder="Digite o nome do paciente"
-                  placeholderTextColor="#94A3B8"
-                  value={paciente}
-                  onChangeText={setPaciente}
+                <SelectField
+                  label="Consulta *"
+                  value={consultaId}
+                  onChange={setConsultaId}
+                  placeholder={loading ? "Carregando..." : "Selecione a consulta"}
+                  options={consultasOptions}
                 />
               </View>
 
@@ -461,7 +482,27 @@ export default function ReagendamentoScreen() {
                 style={styles.saveButton}
 
                 // navega para a tela de sucesso
-                onPress={() => router.push('/reagendamento-sucesso')}
+                onPress={async () => {
+                if (!consultaId || !novaData || !novoHorario || !motivo) {
+                  Alert.alert('Erro', 'Preencha todos os campos obrigatórios.');
+                  return;
+                }
+                try {
+                  const res = await solicitarReagendamento({
+                    consulta_id: consultaId,
+                    novaData,
+                    novoHorario,
+                    motivo
+                  }, token as string);
+                  if (res.status === 200 || res.status === 201) {
+                    router.push('/reagendamento-sucesso');
+                  } else {
+                    Alert.alert('Erro', res.dados?.mensagem || 'Erro ao reagendar.');
+                  }
+                } catch(e) {
+                  Alert.alert('Erro', 'Erro de conexão.');
+                }
+              }}
               >
 
                 {/* ícone de confirmação */}

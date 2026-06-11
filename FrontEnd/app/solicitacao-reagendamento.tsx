@@ -33,6 +33,10 @@ import { router } from 'expo-router';
 // componente de fundo degradê
 // usado para deixar o background mais moderno e suave
 import { LinearGradient } from 'expo-linear-gradient';
+import SelectField from '@/components/ui/selectField';
+import { useAuth } from '@/contexts/AuthContext';
+import { buscarConsultas, solicitarReagendamento } from '@/services/api';
+import { Alert, ActivityIndicator } from 'react-native';
 
 // componente da tela de cadastro realizado com sucesso
 export default function SolicitacaoReagendamentoScreen() {
@@ -49,9 +53,52 @@ export default function SolicitacaoReagendamentoScreen() {
   const [horario, setHorario] = useState(''); // novo horário escolhido
   const [enviado, setEnviado] = useState(false); // controla se a solicitação foi enviada
 
-function enviarSolicitacao() {
-  // marca a solicitação como enviada (muda a tela)
-  setEnviado(true);
+  const { token } = useAuth();
+  const [consultaId, setConsultaId] = useState('');
+  const [consultasOptions, setConsultasOptions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  React.useEffect(() => {
+    async function fetchConsultas() {
+      if (!token) return;
+      try {
+        const res = await buscarConsultas({}, token);
+        if (res.status === 200 && res.dados) {
+          const options = res.dados.map((c: any) => ({
+            label: `${c.data} ${c.horario} - ${c.paciente || 'Paciente'}`,
+            value: c.id
+          }));
+          setConsultasOptions(options);
+        }
+      } catch (error) {
+        console.error('Erro', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchConsultas();
+  }, [token]);
+
+async function enviarSolicitacao() {
+  if (!consultaId || !novaData || !horario || !motivo) {
+    Alert.alert('Erro', 'Preencha todos os campos obrigatórios.');
+    return;
+  }
+  try {
+    const res = await solicitarReagendamento({
+      consulta_id: consultaId,
+      novaData,
+      novoHorario: horario,
+      motivo
+    }, token as string);
+    if (res.status === 200 || res.status === 201) {
+      setEnviado(true);
+    } else {
+      Alert.alert('Erro', res.dados?.mensagem || 'Erro ao reagendar.');
+    }
+  } catch(e) {
+    Alert.alert('Erro', 'Erro de conexão.');
+  }
 }
 
 return (
@@ -93,32 +140,16 @@ return (
                 </Text>
 
                 {/* campo estagiario */}
-                <View style={styles.field}>
-                  <Text style={styles.label}>
-                    Estagiário
-                  </Text>
-
-                  <TextInput
-                    value={dataAtual}
-                    onChangeText={setEstagiario}
-                    placeholder="Nome do estagiário"
-                    placeholderTextColor="#8B9A97"
-                    style={styles.input}
-                  />
-                </View>
+                
 
                 {/* campo data atual */}
                 <View style={styles.field}>
-                  <Text style={styles.label}>
-                    Data atual
-                  </Text>
-
-                  <TextInput
-                    value={dataAtual}
-                    onChangeText={setDataAtual}
-                    placeholder="12/06/2026"
-                    placeholderTextColor="#8B9A97"
-                    style={styles.input}
+                  <SelectField
+                    label="Consulta atual *"
+                    value={consultaId}
+                    onChange={setConsultaId}
+                    placeholder={loading ? "Carregando..." : "Selecione a consulta para reagendar"}
+                    options={consultasOptions}
                   />
                 </View>
 

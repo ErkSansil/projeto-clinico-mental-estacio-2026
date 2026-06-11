@@ -21,7 +21,7 @@ async function verificarConsultaOcupada({ sala_id, data, horario }) {
 }
 
 function gerarDatasRecorrentes(dataInicial, quantidade = 10, intervaloSemanas = 1) {
-	const dataFormatada = new Date(funcoesGerais.formatarData(dataInicial).data);
+	const dataFormatada = new Date(funcoesGerais.formatarData(dataInicial, 'iso').data);
 
 	if (Number.isNaN(dataFormatada.getTime())) {
 		return {

@@ -1,7 +1,7 @@
 // arquivo app/novo-agendamento.tsx
 // aqui eu organizei a tela de novo agendamento e deixei responsiva para celular e desktop
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { router } from 'expo-router';
 
 import {
@@ -13,6 +13,8 @@ import {
   TouchableOpacity,
   View,
   useWindowDimensions,
+  ActivityIndicator,
+  Alert
 } from 'react-native';
 
 // importando imagem
@@ -21,10 +23,13 @@ import { Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import SelectField from '@/components/ui/selectField';
+import { useAuth } from '@/contexts/AuthContext';
+import { listarPacientes, listarProfissionais, listarSalas, criarConsulta } from '@/services/api';
 
 export default function NovoAgendamentoScreen() {
   // aqui eu pego a largura da tela pra saber se está no mobile ou desktop
   const { width } = useWindowDimensions();
+  const { token } = useAuth();
 
   // se for maior ou igual a 900, eu considero desktop
   const isDesktop = width >= 900;
@@ -36,9 +41,67 @@ export default function NovoAgendamentoScreen() {
   const [tipoAtendimento, setTipoAtendimento] = useState('');
   const [duracao, setDuracao] = useState('');
   const [sessao, setSessao] = useState('');
-  const [data, setData] = useState('12/06/2026');
+  const [data, setData] = useState('');
   const [observacoes, setObservacoes] = useState('');
   const [automatico, setAutomatico] = useState(true);
+
+  const [pacientesOptions, setPacientesOptions] = useState<{label: string, value: string}[]>([]);
+  const [estagiariosOptions, setEstagiariosOptions] = useState<{label: string, value: string}[]>([]);
+  const [salasOptions, setSalasOptions] = useState<{label: string, value: string}[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchData() {
+      if (!token) return;
+      try {
+        const [resPacientes, resProfissionais, resSalas] = await Promise.all([
+          listarPacientes(token),
+          listarProfissionais(token),
+          listarSalas(token)
+        ]);
+
+        if (resPacientes.status === 200 && resPacientes.dados.pacientes) {
+          setPacientesOptions(resPacientes.dados.pacientes.map((p: any) => ({ label: p.nome, value: p.cpf })));
+        }
+        if (resProfissionais.status === 200 && resProfissionais.dados.profissionais) {
+          setEstagiariosOptions(resProfissionais.dados.profissionais.map((p: any) => ({ label: p.nome, value: p.id }))); // Ou usar p.matricula dependendo do backend
+        }
+        if (resSalas.status === 200 && resSalas.dados.salas) {
+          setSalasOptions(resSalas.dados.salas.map((s: any) => ({ label: s.descricao || s.nome || `Sala ${s.id}`, value: s.id })));
+        }
+      } catch (error) {
+        console.error("Erro ao buscar dados:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchData();
+  }, [token]);
+
+  const handleSalvar = async () => {
+    if (!paciente || !sala || !data || !horario || !token) {
+      Alert.alert('Erro', 'Por favor, preencha os campos obrigatórios.');
+      return;
+    }
+
+    try {
+      const resposta = await criarConsulta({
+        cpfPaciente: paciente,
+        sala: sala,
+        data: data,
+        horario: horario,
+        observacao: observacoes
+      }, token);
+
+      if (resposta.status === 201) {
+        router.push('/agendamento-sucesso');
+      } else {
+        Alert.alert('Erro', resposta.dados?.mensagem || 'Não foi possível criar o agendamento.');
+      }
+    } catch (error) {
+      Alert.alert('Erro', 'Erro de conexão.');
+    }
+  };
 
   return (
     <LinearGradient
@@ -237,13 +300,8 @@ export default function NovoAgendamentoScreen() {
                 label="Paciente *"
                 value={paciente}
                 onChange={setPaciente}
-                placeholder="Ana Silva"
-                options={[
-                  { label: 'Ana Silva', value: 'ana-silva' },
-                  { label: 'Lucas Mendes', value: 'lucas-mendes' },
-                  { label: 'Maria Clara Souza', value: 'maria-clara' },
-                  { label: 'Pedro Henrique', value: 'pedro-henrique' },
-                ]}
+                placeholder={loading ? "Carregando..." : "Selecione o paciente"}
+                options={pacientesOptions}
               />
             </View>
 
@@ -252,12 +310,8 @@ export default function NovoAgendamentoScreen() {
                 label="Estagiário *"
                 value={estagiario}
                 onChange={setEstagiario}
-                placeholder="Paulo Oliveira"
-                options={[
-                  { label: 'Paulo Oliveira', value: 'paulo-oliveira' },
-                  { label: 'Renato Alves', value: 'renato-alves' },
-                  { label: 'Patrícia Melo', value: 'patricia-melo' },
-                ]}
+                placeholder={loading ? "Carregando..." : "Selecione o estagiário"}
+                options={estagiariosOptions}
               />
             </View>
 
@@ -271,7 +325,7 @@ export default function NovoAgendamentoScreen() {
                   style={styles.input}
                   value={data}
                   onChangeText={setData}
-                  placeholder="12/06/2026"
+                  placeholder="DD/MM/AAAA"
                   placeholderTextColor="#94A3B8"
                 />
               </View>
@@ -282,7 +336,7 @@ export default function NovoAgendamentoScreen() {
                 label="Horário *"
                 value={horario}
                 onChange={setHorario}
-                placeholder="14:00"
+                placeholder="Selecione o horário"
                 options={[
                   { label: '08:00', value: '08:00' },
                   { label: '09:00', value: '09:00' },
@@ -299,13 +353,8 @@ export default function NovoAgendamentoScreen() {
                 label="Sala *"
                 value={sala}
                 onChange={setSala}
-                placeholder="Sala 2"
-                options={[
-                  { label: 'Sala 1', value: 'sala-1' },
-                  { label: 'Sala 2', value: 'sala-2' },
-                  { label: 'Sala 3', value: 'sala-3' },
-                  { label: 'Sala infantil', value: 'sala-infantil' },
-                ]}
+                placeholder={loading ? "Carregando..." : "Selecione a sala"}
+                options={salasOptions}
               />
             </View>
 
@@ -399,7 +448,7 @@ export default function NovoAgendamentoScreen() {
 
             <TouchableOpacity
               style={styles.saveButton}
-              onPress={() => router.push('/agendamento-sucesso')}
+              onPress={handleSalvar}
             >
               <Ionicons name="checkmark-outline" size={22} color="#FFFFFF" />
               <Text style={styles.saveText}>Salvar agendamento</Text>

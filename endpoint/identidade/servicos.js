@@ -37,8 +37,13 @@ async function buscarProfissionalPorMatricula(matricula) {
 	return db.selecionar('profissional', ['id'], { matricula: funcoesGerais.normalizarTexto(matricula) });
 }
 
-async function buscarSalaPorNumero(descricao) {
-	return db.selecionar('sala', ['id'], { descricao: funcoesGerais.normalizarTexto(descricao) });
+async function buscarSalaPorNumero(id) {
+	return db.selecionar('sala', ['id'], { id });
+}
+
+async function buscarProfissionalPorId(id) {
+    const profissional = await db.selecionar('profissional', ['id', 'nome', 'email', 'cpf', 'celular', 'matricula', 'privilegio'], { id });
+    return profissional[0] || null;
 }
 
 async function atualizarAtividadePaciente(paciente_id, atividade) {
@@ -118,5 +123,6 @@ module.exports = {
 	atualizarAtividadePaciente,
 	verificarAtividadePaciente,
 	buscarHistoricoPaciente,
-    cadastrarUsuario
+    cadastrarUsuario,
+    buscarProfissionalPorId
 };

@@ -1,7 +1,7 @@
 // arquivo app/(tabs)/perfil.tsx
 // aqui eu organizei essa tela e deixei os comentários explicando minha parte do código
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 // importando componentes básicos
 import {
@@ -12,6 +12,7 @@ import {
   TouchableOpacity,
   useWindowDimensions,
   Image,
+  ActivityIndicator,
 } from 'react-native';
 
 // hook de navegação
@@ -29,6 +30,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 // importando ícones
 import { Ionicons } from '@expo/vector-icons';
 
+import { buscarPerfilProfissional } from '../services/api';
+
 // componente da tela de perfil do usuário
 export default function PerfilScreen() {
 
@@ -39,10 +42,32 @@ export default function PerfilScreen() {
   const isDesktop = width >= 900;
 
   // token do usuário logado
-  const { token } = useAuth();
+  const { token, sairLogin } = useAuth();
 
   // badge global de reagendamentos pendentes
   const { pendentesReagendamento } = useBadge();
+
+  const [perfil, setPerfil] = useState<any>(null);
+  const [carregando, setCarregando] = useState(true);
+
+  useEffect(() => {
+    async function carregarPerfil() {
+      if (!token) return;
+      try {
+        const resposta = await buscarPerfilProfissional(token);
+
+        console.log('Resposta do perfil:', resposta);
+        if (resposta.status === 200 && resposta.dados?.dados) {
+          setPerfil(resposta.dados.dados);
+        }
+      } catch (error) {
+        console.error('Erro ao carregar perfil:', error);
+      } finally {
+        setCarregando(false);
+      }
+    }
+    carregarPerfil();
+  }, [token]);
 
   return (
 
@@ -290,41 +315,37 @@ export default function PerfilScreen() {
               </View>
 
               {/* conteúdo */}
-              <View style={styles.infoBody}>
-
-                <View style={styles.infoBlock}>
-                  <Text style={styles.label}>Nome</Text>
-
-                  <Text style={styles.value}>
-                    Paulo Oliveira
-                  </Text>
+              {carregando ? (
+                <View style={{ padding: 20, alignItems: 'center' }}>
+                  <ActivityIndicator size="large" color="#0C706E" />
                 </View>
+              ) : (
+                <View style={styles.infoBody}>
 
-                <View style={styles.infoBlock}>
-                  <Text style={styles.label}>Perfil</Text>
+                  <View style={styles.infoBlock}>
+                    <Text style={styles.label}>Nome</Text>
+                    <Text style={styles.value}>{perfil?.nome || 'Não informado'}</Text>
+                  </View>
 
-                  <Text style={styles.value}>
-                    Administrador
-                  </Text>
+                  <View style={styles.infoBlock}>
+                    <Text style={styles.label}>Perfil</Text>
+                    <Text style={styles.value}>{perfil?.privilegio === 1 ? 'Administrador' : 'Estagiário'}</Text>
+                  </View>
+
+                  <View style={styles.infoBlock}>
+                    <Text style={styles.label}>E-mail</Text>
+                    <Text style={styles.value}>{perfil?.email || 'Não informado'}</Text>
+                  </View>
+
+                  <View style={styles.infoBlock}>
+                    <Text style={styles.label}>Função</Text>
+                    <Text style={styles.value}>
+                      {perfil?.privilegio === 1 ? 'Gerenciamento do sistema' : 'Acompanhamento clínico e registros'}
+                    </Text>
+                  </View>
+
                 </View>
-
-                <View style={styles.infoBlock}>
-                  <Text style={styles.label}>E-mail</Text>
-
-                  <Text style={styles.value}>
-                    paulo@sep.com
-                  </Text>
-                </View>
-
-                <View style={styles.infoBlock}>
-                  <Text style={styles.label}>Função</Text>
-
-                  <Text style={styles.value}>
-                    Acompanhamento clínico e registros
-                  </Text>
-                </View>
-
-              </View>
+              )}
             </View>
 
             {/* card acesso */}
@@ -345,6 +366,7 @@ export default function PerfilScreen() {
                   style={styles.logoutButton}
                   activeOpacity={0.85}
                   onPress={() => {
+                    sairLogin();
                     router.replace('/login');
                   }}
                 >

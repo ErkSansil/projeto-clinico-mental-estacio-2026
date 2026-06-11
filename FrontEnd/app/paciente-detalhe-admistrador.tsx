@@ -1,7 +1,7 @@
 // arquivo app/paciente-detalhe.tsx
 
 // importação principal do React, pois é necessário para criar componentes React Native.
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 // componentes nativos do React são usados nesta tela
 import {
@@ -18,7 +18,8 @@ import {
   // hook que pega largura e altura da tela em tempo real
   // usado para responsividade entre mobile e desktop 
   useWindowDimensions,
-
+  ActivityIndicator,
+  Alert
 } from 'react-native';
 
 // biblioteca de ícones do Expo
@@ -26,7 +27,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 
 // router pra navegação entre telas
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 
 // importando imagem para icones
 import { Image } from 'react-native';
@@ -38,20 +39,27 @@ import { LinearGradient } from 'expo-linear-gradient';
 // importa para selecionar as opcoes de pacientes
 import { Picker } from '@react-native-picker/picker';
 
+import { useAuth } from '@/contexts/AuthContext';
+import { buscarDetalhePaciente, buscarHistoricoPaciente, editarPaciente } from '@/services/api';
+
 // tela de detalhes do paciente
 export default function PacienteDetalheScreen() {
 
   // pegando largura da tela pra responsividade
   const { width } = useWindowDimensions();
+  const { cpf } = useLocalSearchParams();
+  const { token } = useAuth();
+  
+  const [loading, setLoading] = useState(true);
 
   // Criando campos editaveis
   const [editando, setEditando] = useState(false);
   // nome do paciente
-  const [nome, setNome] = useState('Ana Silva');
+  const [nome, setNome] = useState('');
   // idade do paciente
-  const [idade, setIdade] = useState('14');
+  const [idade, setIdade] = useState('');
   // tipo de paciente
-  const [tipo, setTipo] = useState('Criança');
+  const [tipo, setTipo] = useState('');
   // opcoes de pacientes
   const tiposPaciente = [
   'Criança',
@@ -60,26 +68,106 @@ export default function PacienteDetalheScreen() {
   'Idoso',
 ];
   // aparece responsavel se for menor de idade
-  const [responsavel, setResponsavel] = useState('Mariana Silva');
+  const [responsavel, setResponsavel] = useState('');
   // contato do paciente
-  const [contato, setContato] = useState('11 95596-4867');
+  const [contato, setContato] = useState('');
 
   // campos editaveis para administrador do resumo do acompanhamento do paciente
   // quantidade de atendimentos
-  const [atendimentos, setAtendimentos] = useState('8');
+  const [atendimentos, setAtendimentos] = useState('0');
   // quantidade de presenças
-  const [presencas, setPresencas] = useState('6');
+  const [presencas, setPresencas] = useState('0');
   // quantidade de faltas
-  const [faltas, setFaltas] = useState('2');
+  const [faltas, setFaltas] = useState('0');
   // quantidade de cancelamentos
-  const [cancelamentos, setCancelamentos] = useState('2');
+  const [cancelamentos, setCancelamentos] = useState('0');
   // situacao do paciente
   const [situacao, setSituacao] = useState('Em acompanhamento');
 
   // define se é mobile ou desktop baseado na largura da tela
   const isDesktop = width >= 900;
 
-    // fundo principal da tela
+  useEffect(() => {
+    async function fetchData() {
+      if (!token || !cpf) {
+        setLoading(false);
+        return;
+      }
+      try {
+        const resDetalhe = await buscarDetalhePaciente(cpf as string, token);
+        if (resDetalhe.status === 200 && resDetalhe.dados.paciente) {
+          const p = resDetalhe.dados.paciente;
+          setNome(p.nome);
+          setContato(p.celular || p.email || '');
+          setResponsavel(p.responsavelNome || '');
+          setSituacao(p.ativo === 1 ? 'Em acompanhamento' : 'Inativo');
+          
+          if (p.dataNascimento) {
+            const age = new Date().getFullYear() - new Date(p.dataNascimento).getFullYear();
+            setIdade(age.toString() + ' anos');
+            if (age < 12) setTipo('Criança');
+            else if (age < 18) setTipo('Adolescente');
+            else if (age < 60) setTipo('Adulto');
+            else setTipo('Idoso');
+          } else {
+            setIdade('Não informada');
+            setTipo('Adulto');
+          }
+        }
+        
+        const resHistorico = await buscarHistoricoPaciente(cpf as string, token);
+        if (resHistorico.status === 200 && resHistorico.dados.historico) {
+           let pCount = 0, fCount = 0, cCount = 0, tCount = 0;
+           resHistorico.dados.historico.forEach((h: any) => {
+              if (h.status === 'agendada') tCount++;
+              else if (h.status === 'concluida') { tCount++; pCount++; }
+              else if (h.status === 'cancelada') cCount++;
+              
+              if (h.presenca === 'Presente') pCount++;
+              else if (h.presenca === 'Ausente') fCount++;
+           });
+           setAtendimentos(resHistorico.dados.historico.length.toString());
+           setPresencas(pCount.toString());
+           setFaltas(fCount.toString());
+           setCancelamentos(cCount.toString());
+        }
+      } catch (error) {
+        console.error("Erro ao buscar dados do paciente:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchData();
+  }, [cpf, token]);
+
+  const handleSave = async () => {
+    if (!token || !cpf) return;
+    try {
+       const res = await editarPaciente({
+         cpf: cpf as string,
+         nome: nome,
+         celular: contato,
+       }, token);
+       if (res.status === 200) {
+          Alert.alert('Sucesso', 'Paciente atualizado com sucesso.');
+          setEditando(false);
+       } else {
+          Alert.alert('Erro', res.dados?.mensagem || res.dados?.erro || 'Erro ao atualizar.');
+       }
+    } catch (e) {
+       Alert.alert('Erro', 'Erro de conexão.');
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#0C706E" />
+      </View>
+    );
+  }
+
+  // fundo principal da tela
     return (
     <LinearGradient
       colors={['#F7FCFA', '#EEF8F5', '#F9FCFB']}
@@ -258,17 +346,17 @@ export default function PacienteDetalheScreen() {
             <View style={styles.avatar}>
 
               {/* iniciais do paciente */}
-              <Text style={styles.avatarText}>AS</Text>
+              <Text style={styles.avatarText}>{(nome || 'N I').substring(0, 2).toUpperCase()}</Text>
             </View>
 
             {/* informações principais do paciente */}
             <View style={styles.profileInfo}>
 
               {/* nome do paciente */}
-              <Text style={styles.patientName}>Ana Silva</Text>
+              <Text style={styles.patientName}>{nome || 'Não informado'}</Text>
 
               {/* idade e categoria */}
-              <Text style={styles.patientSub}>14 anos • Criança</Text>
+              <Text style={styles.patientSub}>{idade} • {tipo}</Text>
 
               {/* badge de status */}
               <View style={styles.statusBadge}>
@@ -281,7 +369,7 @@ export default function PacienteDetalheScreen() {
                 />
 
                 {/* texto do status */}
-                <Text style={styles.statusText}>Em acompanhamento</Text>
+                <Text style={styles.statusText}>{situacao}</Text>
               </View>
             </View>
           </View>
@@ -398,7 +486,7 @@ export default function PacienteDetalheScreen() {
                     onChangeText={setResponsavel}
                   />
                 ) : (
-                  <Text style={styles.infoValue}>{responsavel}</Text>
+                  <Text style={styles.infoValue}>{responsavel || 'N/A'}</Text>
                 )}
               </View>
             )}
@@ -550,10 +638,10 @@ export default function PacienteDetalheScreen() {
             style={styles.primaryButton}
             onPress={() => {
               if (editando) {
-                // aqui futuramente você chama a API
-                console.log('Paciente salvo');
+                handleSave();
+              } else {
+                setEditando(true);
               }
-              setEditando(!editando);
             }}
           >
           <Text style={styles.primaryButtonText}>
