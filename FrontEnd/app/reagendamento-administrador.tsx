@@ -155,7 +155,7 @@ export default function ReagendamentoScreen() {
               {/* pacientes */}
               <TouchableOpacity
                 style={styles.menuItem}
-                onPress={() => router.push('/pacientes-administrador')}
+                onPress={() => router.push('/pacientes-admin')}
               >
                 <Image
                   source={require('../assets/images/paciente.png')}
@@ -168,7 +168,7 @@ export default function ReagendamentoScreen() {
           {/* salas */}
           <TouchableOpacity
             style={styles.menuItem}
-            onPress={() => router.push('/salas-administrador')}
+            onPress={() => router.push('/salas-admin')}
           >
             <Image
               source={require('../assets/images/salas.png')}
@@ -207,7 +207,7 @@ export default function ReagendamentoScreen() {
           {/* cadastrar estagiário */}
           <TouchableOpacity
             style={styles.menuItem}
-            onPress={() => router.push('/cadastro-estagiario')}
+            onPress={() => router.push('/cadastro')}
           >
             <Image
               source={require('../assets/images/estagiario.png')}

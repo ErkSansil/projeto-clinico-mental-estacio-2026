@@ -34,6 +34,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 // hook de autenticação para pegar o token do admin
 import { useAuth } from '../contexts/AuthContext';
 
+// badge global de reagendamentos pendentes
+import { useBadge } from '../contexts/BadgeContext';
+
 // função que busca estatísticas reais do banco para o painel
 import { buscarEstatisticasAdmin } from '../services/api';
 
@@ -47,6 +50,9 @@ export default function AdminDashboardScreen() {
 
   // token do usuário logado para autenticar a busca
   const { token } = useAuth();
+
+  // badge global de reagendamentos pendentes
+  const { pendentesReagendamento } = useBadge();
 
   // estatísticas do sistema vindas do backend
   const [stats, setStats] = useState<any>(null);
@@ -215,6 +221,11 @@ export default function AdminDashboardScreen() {
                   style={styles.menuIcon}
                 />
                 <Text style={styles.menuText}>Pedidos Reagendamento</Text>
+                {pendentesReagendamento > 0 && (
+                  <View style={styles.menuBadge}>
+                    <Text style={styles.menuBadgeText}>{pendentesReagendamento}</Text>
+                  </View>
+                )}
               </TouchableOpacity>
 
               {/* item do menu: cadastro de estagiário */}
@@ -654,6 +665,24 @@ menuTextActive: {
   color: '#0C706E',
   fontWeight: '600',
 },
+
+  // badge de notificação no item do menu
+  menuBadge: {
+    backgroundColor: '#E53935',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 'auto' as any,
+    paddingHorizontal: 5,
+  },
+
+  menuBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
 
   // área da logo
   logoArea: {

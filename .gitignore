@@ -1,0 +1,18 @@
+# dependências
+node_modules/
+
+# variáveis de ambiente — nunca subir senha/chave no repositório
+.env
+.env.local
+.env.*
+
+# configurações locais do editor
+.claude/
+
+# logs
+*.log
+npm-debug.log*
+
+# sistema operacional
+.DS_Store
+Thumbs.db

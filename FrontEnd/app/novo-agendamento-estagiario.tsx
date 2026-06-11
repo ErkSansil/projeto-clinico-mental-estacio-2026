@@ -37,8 +37,8 @@ import { Ionicons } from '@expo/vector-icons';
 // hook de autenticação para acessar o token JWT
 import { useAuth } from '../contexts/AuthContext';
 
-// serviço para criar consultas e listar salas da API
-import { criarConsulta, listarSalas } from '../services/api';
+// serviço para criar consultas, cadastrar paciente e listar salas da API
+import { criarConsulta, listarSalas, cadastrar } from '../services/api';
 
 // componente personalizado de seleção usado para escolher opções
 // como horário, sala, duração e tipo de atendimento
@@ -50,6 +50,17 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 
 // componente para aparecer o calendario no dispositivo mobile
 import { Platform } from 'react-native';
+
+// verifica se a data dd/mm/aaaa indica menor de 18 anos
+function menorDeIdade(dataNasc: string): boolean {
+  const p = dataNasc.split('/');
+  if (p.length !== 3 || p[2].length !== 4) return false;
+  const nasc = new Date(`${p[2]}-${p[1]}-${p[0]}T00:00:00`);
+  const hoje = new Date();
+  const idade = hoje.getFullYear() - nasc.getFullYear()
+    - (hoje < new Date(hoje.getFullYear(), nasc.getMonth(), nasc.getDate()) ? 1 : 0);
+  return idade < 18;
+}
 
 // formata o CPF no padrão xxx.xxx.xxx-xx conforme o usuário digita
 function formatarCpf(valor: string): string {
@@ -85,16 +96,28 @@ export default function NovoAgendamentoEstagiarioScreen() {
   // considera se é mobile quando a tela é menor que 900
   const isDesktop = width >= 900;
   
-  // guarda o nome do paciente digitado
+  // CPF do paciente — identificador principal
   const [paciente, setPaciente] = useState('');
+
+  // dados cadastrais do paciente — preenchidos junto com o agendamento
+  const [nomeCompleto, setNomeCompleto] = useState('');
+  const [email, setEmail] = useState('');
+  const [celular, setCelular] = useState('');
+  const [dataNascimento, setDataNascimento] = useState('');
+  const [endereco, setEndereco] = useState('');
+  const [responsavelNome, setResponsavelNome] = useState('');
+  const [responsavelContato, setResponsavelContato] = useState('');
+
+  // detecta menor de 18 com base na data de nascimento digitada
+  const precisaResponsavel = dataNascimento.length === 10 && menorDeIdade(dataNascimento);
 
   // guarda o nome do estagiário digitado
   const [estagiario, setEstagiario] = useState('');
 
-  // guarda a idade digitada
+  // guarda a idade digitada (campo visual, não usado no cadastro)
   const [idade, setIdade] = useState('');
-  
-  // guarda o responsável
+
+  // guarda o responsável (campo visual legado, mantido por compatibilidade)
   const [responsavel, setResponsavel] = useState('');
 
   // armazena o horário escolhido para o atendimento
@@ -157,29 +180,60 @@ export default function NovoAgendamentoEstagiarioScreen() {
   }, [token]);
 
   // função chamada ao pressionar "Salvar agendamento"
-  // valida os dados e chama a API de criação de consulta
+  // cadastra o paciente (se não existir) e cria as 10 consultas recorrentes
   async function handleSalvarAgendamento() {
-    // valida os campos obrigatórios antes de enviar
-    if (!paciente || !sala || !horario || !data) {
-      setErro('Preencha os campos obrigatórios: CPF do paciente, sala, horário e data.');
+    // valida os campos obrigatórios do paciente e do agendamento
+    if (!paciente || !nomeCompleto || !email || !celular || !dataNascimento || !endereco || !sala || !horario || !data) {
+      setErro('Preencha todos os campos obrigatórios: dados do paciente, sala, horário e data.');
       return;
     }
 
-    // limpa erro anterior e ativa o estado de carregamento
+    if (precisaResponsavel && (!responsavelNome || !responsavelContato)) {
+      setErro('Paciente menor de 18 anos: informe nome e contato do responsável.');
+      return;
+    }
+
     setErro('');
     setCarregando(true);
 
     try {
-      // converte a data do formato brasileiro (dd/mm/aaaa) para ISO (aaaa-mm-dd)
+      const cpfDigitos = paciente.replace(/\D/g, '');
+      // senha gerada internamente — estagiário não vê, satisfaz o regex do backend
+      const senhaGerada = cpfDigitos.slice(0, 6) + 'Aa1';
+
+      // tenta cadastrar o paciente — se já existir (422) ignora e segue
+      const payloadPaciente: any = {
+        tipo: 'paciente',
+        nomeCompleto,
+        cpf: cpfDigitos,
+        email,
+        celular,
+        dataNascimento,
+        endereco,
+        senha: senhaGerada,
+        confirmacaoSenha: senhaGerada,
+      };
+      if (precisaResponsavel) {
+        payloadPaciente.responsavelNome = responsavelNome;
+        payloadPaciente.responsavelContato = responsavelContato;
+      }
+      const resCadastro = await cadastrar(payloadPaciente);
+      // 201 = criado / 422 = já existe — ambos permitem criar o agendamento
+      if (resCadastro.status !== 201 && resCadastro.status !== 422) {
+        setErro(resCadastro.dados?.mensagem ?? 'Erro ao registrar paciente. Verifique os dados.');
+        return;
+      }
+
+      // converte a data do agendamento de dd/mm/aaaa para aaaa-mm-dd
       const partesData = data.split('/');
       const dataISO = partesData.length === 3
         ? `${partesData[2]}-${partesData[1]}-${partesData[0]}`
         : data;
 
-      // chama a API para criar o agendamento com as 10 sessões recorrentes
+      // cria as 10 consultas recorrentes já com status 'agendada'
       const resultado = await criarConsulta(
         {
-          cpfPaciente: paciente.replace(/\D/g, ''),
+          cpfPaciente: cpfDigitos,
           sala,
           data: dataISO,
           horario,
@@ -189,7 +243,6 @@ export default function NovoAgendamentoEstagiarioScreen() {
       );
 
       if (resultado.status !== 201) {
-        // exibe o erro retornado pelo backend
         setErro(resultado.dados.mensagem || 'Erro ao criar agendamento. Verifique os dados.');
         return;
       }
@@ -197,10 +250,8 @@ export default function NovoAgendamentoEstagiarioScreen() {
       // navega para a tela de sucesso após criar as consultas
       router.push('/agendamento-sucesso-estagiario');
     } catch (e) {
-      // erro de rede ou inesperado
       setErro('Não foi possível conectar ao servidor. Verifique sua conexão.');
     } finally {
-      // sempre desativa o carregamento ao final
       setCarregando(false);
     }
   }
@@ -320,6 +371,112 @@ export default function NovoAgendamentoEstagiarioScreen() {
                   value={paciente}
                   onChangeText={(v) => setPaciente(formatarCpf(v))} />
               </View>
+
+              {/* nome completo do paciente */}
+              <View style={[styles.field, isDesktop && styles.fieldDesktop]}>
+                <Text style={styles.label}>Nome completo *</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Nome completo do paciente"
+                  placeholderTextColor="#94A3B8"
+                  value={nomeCompleto}
+                  onChangeText={setNomeCompleto}
+                />
+              </View>
+
+              {/* e-mail do paciente */}
+              <View style={[styles.field, isDesktop && styles.fieldDesktop]}>
+                <Text style={styles.label}>E-mail *</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="email@exemplo.com"
+                  placeholderTextColor="#94A3B8"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  value={email}
+                  onChangeText={setEmail}
+                />
+              </View>
+
+              {/* celular do paciente */}
+              <View style={[styles.field, isDesktop && styles.fieldDesktop]}>
+                <Text style={styles.label}>Celular *</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="(00) 00000-0000"
+                  placeholderTextColor="#94A3B8"
+                  keyboardType="phone-pad"
+                  value={celular}
+                  onChangeText={setCelular}
+                />
+              </View>
+
+              {/* data de nascimento — HTML input para funcionar no browser */}
+              <View style={[styles.field, isDesktop && styles.fieldDesktop]}>
+                <Text style={styles.label}>Data de nascimento *</Text>
+                <View style={[styles.input, { justifyContent: 'center' }]}>
+                  {React.createElement('input', {
+                    type: 'date',
+                    value: dataNascimento
+                      ? `${dataNascimento.split('/')[2]}-${dataNascimento.split('/')[1]}-${dataNascimento.split('/')[0]}`
+                      : '',
+                    onChange: (e: any) => {
+                      const val = e.target.value;
+                      if (val) {
+                        const p = val.split('-');
+                        setDataNascimento(`${p[2]}/${p[1]}/${p[0]}`);
+                      } else {
+                        setDataNascimento('');
+                      }
+                    },
+                    style: {
+                      border: 'none', outline: 'none', background: 'transparent',
+                      fontSize: 15, color: '#17262F', width: '100%', cursor: 'pointer',
+                      fontFamily: 'inherit',
+                    },
+                  })}
+                </View>
+              </View>
+
+              {/* endereço do paciente */}
+              <View style={[styles.field, isDesktop && styles.fieldDesktop]}>
+                <Text style={styles.label}>Endereço *</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Rua, número, bairro..."
+                  placeholderTextColor="#94A3B8"
+                  value={endereco}
+                  onChangeText={setEndereco}
+                />
+              </View>
+
+              {/* responsável — aparece automaticamente quando o paciente for menor de 18 */}
+              {precisaResponsavel && (
+                <>
+                  <View style={[styles.field, isDesktop && styles.fieldDesktop]}>
+                    <Text style={styles.label}>Nome do responsável *</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Nome completo do responsável"
+                      placeholderTextColor="#94A3B8"
+                      value={responsavelNome}
+                      onChangeText={setResponsavelNome}
+                    />
+                  </View>
+
+                  <View style={[styles.field, isDesktop && styles.fieldDesktop]}>
+                    <Text style={styles.label}>Contato do responsável *</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="(00) 00000-0000"
+                      placeholderTextColor="#94A3B8"
+                      keyboardType="phone-pad"
+                      value={responsavelContato}
+                      onChangeText={setResponsavelContato}
+                    />
+                  </View>
+                </>
+              )}
 
               {/* estagiário */}
               <View style={[styles.field, isDesktop && styles.fieldDesktop,]}>

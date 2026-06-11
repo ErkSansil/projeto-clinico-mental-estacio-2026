@@ -328,7 +328,7 @@ export default function PacientesScreen() {
 
                 <TouchableOpacity
                   style={[styles.detailsButton, isMobile && styles.detailsButtonMobile]}
-                  onPress={() => router.push('/paciente-detalhe-estagiario')}
+                  onPress={() => router.push({ pathname: '/paciente-detalhe-estagiario', params: { cpf: paciente.cpf } })}
                 >
                   <Ionicons name="eye-outline" size={16} color="#0C706E" />
                   <Text style={styles.detailsButtonText}>Ver detalhes</Text>

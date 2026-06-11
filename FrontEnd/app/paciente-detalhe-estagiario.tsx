@@ -1,7 +1,7 @@
-// arquivo app/paciente-detalhe.tsx
+// arquivo app/paciente-detalhe-estagiario.tsx
 
 // importação principal do React, pois é necessário para criar componentes React Native.
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 // componentes nativos do React são usados nesta tela
 import {
@@ -14,8 +14,10 @@ import {
   TouchableOpacity,
   // componente base de estrutura e layout
   View,
+  // indicador de carregamento
+  ActivityIndicator,
   // hook que pega largura e altura da tela em tempo real
-  // usado para responsividade entre mobile e desktop 
+  // usado para responsividade entre mobile e desktop
   useWindowDimensions,
 
 } from 'react-native';
@@ -25,7 +27,14 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 
 // router pra navegação entre telas
-import { router } from 'expo-router';
+// useLocalSearchParams pega os parâmetros passados via router.push({ params: ... })
+import { router, useLocalSearchParams } from 'expo-router';
+
+// hook de autenticação para pegar o token JWT
+import { useAuth } from '../contexts/AuthContext';
+
+// funções de API para carregar o perfil do paciente e o histórico de consultas
+import { buscarPerfilPaciente, buscarHistoricoPaciente } from '../services/api';
 
 // componente de fundo degradê
 // usado para deixar o background mais moderno e suave
@@ -41,6 +50,22 @@ const menuItems = [
   ['person-outline', 'Perfil', '/(tabs)/perfil'],
 ];
 
+// calcula a idade em anos a partir de uma data no formato aaaa-mm-dd
+function calcularIdade(dataNasc: string): number {
+  const nasc = new Date(dataNasc + 'T00:00:00');
+  const hoje = new Date();
+  let idade = hoje.getFullYear() - nasc.getFullYear();
+  if (hoje < new Date(hoje.getFullYear(), nasc.getMonth(), nasc.getDate())) idade -= 1;
+  return idade;
+}
+
+// gera as iniciais de um nome (até 2 letras)
+function gerarIniciais(nome: string): string {
+  const partes = nome?.trim().split(' ') ?? [];
+  if (partes.length >= 2) return (partes[0][0] + partes[1][0]).toUpperCase();
+  return partes[0]?.[0]?.toUpperCase() ?? '?';
+}
+
 export default function PacienteDetalheScreen() {
 
   // pega a largura da tela para adaptar no mobile e desktop
@@ -48,6 +73,64 @@ export default function PacienteDetalheScreen() {
 
   // se a tela for maior ou igual a 900, eu considero desktop
   const isDesktop = width >= 900;
+
+  // CPF do paciente passado pela tela de listagem via router.push params
+  const { cpf } = useLocalSearchParams<{ cpf: string }>();
+
+  // token do usuário logado
+  const { token } = useAuth();
+
+  // dados do paciente carregados da API
+  const [paciente, setPaciente] = useState<any>(null);
+
+  // histórico de consultas do paciente
+  const [historico, setHistorico] = useState<any[]>([]);
+
+  // indica se os dados estão sendo carregados
+  const [carregando, setCarregando] = useState(true);
+
+  // carrega os dados do paciente e o histórico quando a tela abre
+  useEffect(() => {
+    async function carregarDados() {
+      if (!cpf || !token) { setCarregando(false); return; }
+      try {
+        // busca perfil básico e histórico em paralelo
+        const [resPerfil, resHistorico] = await Promise.all([
+          buscarPerfilPaciente(cpf, token),
+          buscarHistoricoPaciente(cpf, token),
+        ]);
+        if (resPerfil.status === 200 && resPerfil.dados?.paciente) {
+          setPaciente(resPerfil.dados.paciente);
+        }
+        if (resHistorico.status === 200 && Array.isArray(resHistorico.dados?.historico)) {
+          setHistorico(resHistorico.dados.historico);
+        }
+      } catch {
+        // falha silenciosa — a tela ainda exibe o que conseguiu carregar
+      } finally {
+        setCarregando(false);
+      }
+    }
+    carregarDados();
+  }, [cpf, token]);
+
+  // contadores calculados do histórico real
+  const totalAtendimentos  = historico.length;
+  const totalPresentes     = historico.filter((c: any) => c.status === 'concluida').length;
+  const totalCancelamentos = historico.filter((c: any) => c.status === 'cancelada').length;
+  const totalFaltas        = totalAtendimentos - totalPresentes - totalCancelamentos;
+
+  // idade e categoria calculadas da data de nascimento real
+  const idadeCalculada = paciente?.dataNascimento ? calcularIdade(paciente.dataNascimento) : null;
+  const categoria = idadeCalculada !== null ? (idadeCalculada < 12 ? 'Criança' : idadeCalculada < 18 ? 'Adolescente' : 'Adulto') : '—';
+
+  if (carregando) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator color="#0C706E" size="large" />
+      </View>
+    );
+  }
 
   return (
     // Coloca um fundo com degradê suave pra dar um visual mais clean
@@ -133,34 +216,32 @@ export default function PacienteDetalheScreen() {
           {/* card principal */}
           <View style={styles.profileCard}>
 
-            {/* avatar do paciente */}
+            {/* avatar do paciente com iniciais reais */}
             <View style={styles.avatar}>
-
-              {/* iniciais exibidas dentro do avatar */}
-              <Text style={styles.avatarText}>AS</Text>
+              <Text style={styles.avatarText}>{paciente ? gerarIniciais(paciente.nome) : '?'}</Text>
             </View>
 
             {/* área das informações principais do paciente */}
             <View style={styles.profileInfo}>
 
-              {/* nome do paciente */}
-              <Text style={styles.patientName}>Ana Silva</Text>
+              {/* nome real do paciente carregado da API */}
+              <Text style={styles.patientName}>{paciente?.nome ?? 'Paciente não encontrado'}</Text>
 
-              {/* idade e categoria do paciente */}
-              <Text style={styles.patientSub}>14 anos • Criança</Text>
+              {/* idade e categoria calculadas dinamicamente */}
+              <Text style={styles.patientSub}>
+                {idadeCalculada !== null ? `${idadeCalculada} anos • ${categoria}` : '—'}
+              </Text>
 
-              {/* badge de status do paciente */}
+              {/* badge de status baseado no campo ativo do banco */}
               <View style={styles.statusBadge}>
-
-                {/* ícone do status */}
                 <Ionicons
                   name="heart-outline"
                   size={14}
                   color="#0C706E"
                 />
-
-                {/* texto do status */}
-                <Text style={styles.statusText}>Em acompanhamento</Text>
+                <Text style={styles.statusText}>
+                  {paciente?.ativo === false ? 'Inativo' : 'Em acompanhamento'}
+                </Text>
               </View>
             </View>
           </View>
@@ -214,16 +295,17 @@ export default function PacienteDetalheScreen() {
                 <Text style={styles.sectionTitle}>Dados básicos</Text>
               </View>
 
-              {/* informações básicas do paciente */}
-              <InfoRow label="Nome" value="Ana Silva" />
-              <InfoRow label="Idade" value="14 anos" />
-              <InfoRow label="Tipo" value="Criança" />
-              <InfoRow label="Responsável" value="Mariana Silva" />
+              {/* informações básicas carregadas da API */}
+              <InfoRow label="Nome" value={paciente?.nome ?? '—'} />
+              <InfoRow label="Idade" value={idadeCalculada !== null ? `${idadeCalculada} anos` : '—'} />
+              <InfoRow label="Tipo" value={categoria} />
+              <InfoRow label="CPF" value={paciente?.cpf ?? '—'} />
+              <InfoRow label="E-mail" value={paciente?.email ?? '—'} />
 
-              {/* informação bloqueada para estagiário */}
+              {/* dados sensíveis bloqueados para estagiário */}
               <InfoRow
-                label="Contato"
-                value="Disponível para administração"
+                label="Contato / Endereço"
+                value="Disponível somente para administração"
                 locked
               />
             </View>
@@ -245,57 +327,43 @@ export default function PacienteDetalheScreen() {
                 <Text style={styles.sectionTitle}>Resumo do acompanhamento</Text>
               </View>
 
-              {/* informações resumidas do acompanhamento */}
-              <InfoRow label="Atendimentos" value="8" />
-              <InfoRow label="Presenças" value="6" />
-              <InfoRow label="Faltas" value="2" />
-              <InfoRow label="Cancelamentos" value="2" />
+              {/* contadores calculados do histórico real do paciente */}
+              <InfoRow label="Atendimentos" value={String(totalAtendimentos)} />
+              <InfoRow label="Concluídas" value={String(totalPresentes)} />
+              <InfoRow label="Faltas" value={String(totalFaltas > 0 ? totalFaltas : 0)} />
+              <InfoRow label="Cancelamentos" value={String(totalCancelamentos)} />
 
-              {/* situação atual do paciente */}
+              {/* situação calculada do campo ativo no banco */}
               <InfoRow
-                label="Situação atual"
-                value="Em acompanhamento"
+                label="Situação"
+                value={paciente?.ativo === false ? 'Inativo' : 'Em acompanhamento'}
               />
             </View>
           </View>
 
-          {/* observações */}
+          {/* últimas consultas do paciente — carregadas do histórico real */}
           <View style={styles.sectionCard}>
 
-            {/* cabeçalho da seção de observações */}
             <View style={styles.sectionHeader}>
-
-              {/* ícone da seção */}
-              <Ionicons
-                name="chatbox-ellipses-outline"
-                size={19}
-                color="#0C706E"
-              />
-
-              {/* título da seção */}
-              <Text style={styles.sectionTitle}>Observações permitidas</Text>
+              <Ionicons name="time-outline" size={19} color="#0C706E" />
+              <Text style={styles.sectionTitle}>Últimas consultas</Text>
             </View>
 
-            {/* observação 1 */}
-            <View style={styles.noteBox}>
-
-              {/* texto da observação */}
-              <Text style={styles.note}> Paciente apresenta boa adaptação às sessões.</Text>
-            </View>
-
-            {/* observação 2 */}
-            <View style={styles.noteBox}>
-
-              {/* texto da observação */}
-              <Text style={styles.note}> Necessita acompanhamento contínuo com responsável.</Text>
-            </View>
-
-            {/* observação 3 */}
-            <View style={styles.noteBox}>
-
-              {/* texto da observação */}
-              <Text style={styles.note}> Última sessão realizada sem intercorrências.</Text>
-            </View>
+            {historico.length === 0 ? (
+              <View style={styles.noteBox}>
+                <Text style={styles.note}>Nenhuma consulta registrada.</Text>
+              </View>
+            ) : historico.slice(0, 5).map((c: any, i: number) => (
+              <View key={c.id ?? i} style={styles.noteBox}>
+                <Text style={styles.note}>
+                  {c.data ? new Date(c.data).toLocaleDateString('pt-BR') : '—'}
+                  {'  '}
+                  {c.horario ? c.horario.slice(0, 5) : ''}
+                  {'  '}
+                  {c.sala ? `· ${c.sala}` : ''}
+                </Text>
+              </View>
+            ))}
           </View>
         </View>
       </ScrollView>

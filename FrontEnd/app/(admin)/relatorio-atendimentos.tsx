@@ -25,6 +25,9 @@ import * as XLSX from 'xlsx';
 // hook de autenticação para pegar o token JWT
 import { useAuth } from '../../contexts/AuthContext';
 
+// badge global de reagendamentos pendentes
+import { useBadge } from '../../contexts/BadgeContext';
+
 // serviço que busca os dados do relatório na API
 import { exportarRelatorio } from '../../services/api';
 
@@ -33,6 +36,9 @@ export default function RelatorioAtendimentos() {
   const isDesktop = width >= 900;
   const router = useRouter();
   const { token } = useAuth();
+
+  // badge global de reagendamentos pendentes
+  const { pendentesReagendamento } = useBadge();
 
   // controla o estado de carregamento enquanto o relatório é gerado
   const [gerando, setGerando] = useState(false);
@@ -194,6 +200,13 @@ export default function RelatorioAtendimentos() {
             >
               <Image source={require('../../assets/images/reagendamento.png')} style={styles.menuIcon} />
               <Text style={styles.menuText}>Pedidos Reagendamento</Text>
+
+              {/* badge vermelho com contagem de reagendamentos pendentes */}
+              {pendentesReagendamento > 0 && (
+                <View style={styles.menuBadge}>
+                  <Text style={styles.menuBadgeText}>{pendentesReagendamento}</Text>
+                </View>
+              )}
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -357,6 +370,25 @@ const styles = StyleSheet.create({
   menuTextActive: {
     color: '#0C706E',
     fontWeight: '600',
+  },
+
+  // badge de notificação no item de menu
+  menuBadge: {
+    backgroundColor: '#E53935',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 'auto' as any,
+    paddingHorizontal: 5,
+  },
+
+  // texto do badge de notificação
+  menuBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
   },
 
   content: {

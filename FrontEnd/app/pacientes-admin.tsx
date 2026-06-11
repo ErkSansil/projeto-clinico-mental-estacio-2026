@@ -27,6 +27,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 // hook de autenticação para pegar o token
 import { useAuth } from '../contexts/AuthContext';
 
+// badge global de reagendamentos pendentes — persiste ao navegar entre telas
+import { useBadge } from '../contexts/BadgeContext';
+
 // funções de API para listar, buscar detalhe, editar e cadastrar pacientes
 import { listarPacientes, buscarDetalhePaciente, editarPaciente, cadastrar } from '../services/api';
 
@@ -44,6 +47,9 @@ export default function PacientesAdminScreen() {
 
   // token do usuário logado
   const { token } = useAuth();
+
+  // badge global de reagendamentos pendentes
+  const { pendentesReagendamento } = useBadge();
 
   // lista de pacientes carregada do banco
   const [pacientes, setPacientes] = useState<any[]>([]);
@@ -370,6 +376,12 @@ export default function PacientesAdminScreen() {
                   style={styles.menuIcon}
                 />
                 <Text style={styles.menuText}>Pedidos Reagendamento</Text>
+                {/* badge vermelho mostra a quantidade de reagendamentos pendentes */}
+                {pendentesReagendamento > 0 && (
+                  <View style={styles.menuBadge}>
+                    <Text style={styles.menuBadgeText}>{pendentesReagendamento}</Text>
+                  </View>
+                )}
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -442,14 +454,6 @@ export default function PacientesAdminScreen() {
                 Visualize informações dos pacientes cadastrados e consultas agendadas.
               </Text>
             </View>
-
-            {/* botão para abrir o modal de criação de paciente */}
-            <TouchableOpacity
-              style={styles.newButton}
-              onPress={() => { limparModalCriacao(); setModalCriarAberto(true); }}
-            >
-              <Text style={styles.newButtonText}>+ Novo Paciente</Text>
-            </TouchableOpacity>
 
           </View>
 
@@ -529,154 +533,7 @@ export default function PacientesAdminScreen() {
         </ScrollView>
       </View>
 
-      {/* modal de criação de novo paciente */}
-      <Modal
-        visible={modalCriarAberto}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setModalCriarAberto(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <ScrollView
-            contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}
-            keyboardShouldPersistTaps="handled"
-          >
-            <View style={styles.modalBox}>
-
-              <Text style={styles.modalTitle}>Novo Paciente</Text>
-              <Text style={styles.modalSubtitle}>Preencha os dados para cadastrar</Text>
-
-              <Text style={styles.modalLabel}>Nome Completo *</Text>
-              <TextInput
-                style={styles.modalInput}
-                value={novoNome}
-                onChangeText={setNovoNome}
-                placeholder="Nome completo"
-                placeholderTextColor="#8A98A3"
-              />
-
-              <Text style={styles.modalLabel}>CPF *</Text>
-              <TextInput
-                style={styles.modalInput}
-                value={novoCpf}
-                onChangeText={(v) => setNovoCpf(formatarCpf(v))}
-                placeholder="000.000.000-00"
-                placeholderTextColor="#8A98A3"
-                keyboardType="numeric"
-                maxLength={14}
-              />
-
-              <Text style={styles.modalLabel}>E-mail *</Text>
-              <TextInput
-                style={styles.modalInput}
-                value={novoEmail}
-                onChangeText={setNovoEmail}
-                placeholder="email@exemplo.com"
-                placeholderTextColor="#8A98A3"
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
-
-              <Text style={styles.modalLabel}>Celular *</Text>
-              <TextInput
-                style={styles.modalInput}
-                value={novoCelular}
-                onChangeText={setNovoCelular}
-                placeholder="(00) 00000-0000"
-                placeholderTextColor="#8A98A3"
-                keyboardType="phone-pad"
-              />
-
-              <Text style={styles.modalLabel}>Data de Nascimento *</Text>
-              {/* input HTML nativo para garantir o seletor de data no browser */}
-              <View style={[styles.modalInput, { justifyContent: 'center' }]}>
-                {React.createElement('input', {
-                  type: 'date',
-                  value: novaDataNascimento
-                    ? `${novaDataNascimento.split('/')[2]}-${novaDataNascimento.split('/')[1]}-${novaDataNascimento.split('/')[0]}`
-                    : '',
-                  onChange: (e: any) => {
-                    const val = e.target.value;
-                    if (val) {
-                      // converte aaaa-mm-dd para dd/mm/aaaa
-                      const p = val.split('-');
-                      setNovaDataNascimento(`${p[2]}/${p[1]}/${p[0]}`);
-                    } else {
-                      setNovaDataNascimento('');
-                    }
-                  },
-                  style: {
-                    border: 'none', outline: 'none', background: 'transparent',
-                    fontSize: 14, color: '#17262F', width: '100%', cursor: 'pointer',
-                    fontFamily: 'inherit',
-                  },
-                })}
-              </View>
-
-              <Text style={styles.modalLabel}>Endereço *</Text>
-              <TextInput
-                style={styles.modalInput}
-                value={novoEndereco}
-                onChangeText={setNovoEndereco}
-                placeholder="Rua, número, bairro..."
-                placeholderTextColor="#8A98A3"
-              />
-
-              {/* campos de responsável aparecem somente para menores de 18 */}
-              {novoPrecisaResponsavel && (
-                <>
-                  <Text style={styles.modalLabel}>Nome do Responsável *</Text>
-                  <TextInput
-                    style={styles.modalInput}
-                    value={novoResponsavelNome}
-                    onChangeText={setNovoResponsavelNome}
-                    placeholder="Nome completo do responsável"
-                    placeholderTextColor="#8A98A3"
-                  />
-
-                  <Text style={styles.modalLabel}>Contato do Responsável *</Text>
-                  <TextInput
-                    style={styles.modalInput}
-                    value={novoResponsavelContato}
-                    onChangeText={setNovoResponsavelContato}
-                    placeholder="(00) 00000-0000"
-                    placeholderTextColor="#8A98A3"
-                    keyboardType="phone-pad"
-                  />
-                </>
-              )}
-
-              {/* erro de validação ou de API exibido diretamente no modal */}
-              {erroCriacao !== '' && (
-                <Text style={styles.erroInline}>{erroCriacao}</Text>
-              )}
-
-              <View style={styles.modalBotoes}>
-                <TouchableOpacity
-                  style={styles.modalBotaoCancelar}
-                  onPress={() => setModalCriarAberto(false)}
-                  disabled={criando}
-                >
-                  <Text style={styles.modalBotaoCancelarText}>Cancelar</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.modalBotaoSalvar, criando && { opacity: 0.6 }]}
-                  onPress={salvarNovoPaciente}
-                  disabled={criando}
-                >
-                  {criando
-                    ? <ActivityIndicator color="#fff" size="small" />
-                    : <Text style={styles.modalBotaoSalvarText}>Cadastrar</Text>
-                  }
-                </TouchableOpacity>
-              </View>
-
-            </View>
-          </ScrollView>
-        </View>
-      </Modal>
-
+      {/* modal de edição de paciente — início (criação foi removida: paciente é criado no agendamento) */}
       {/* modal de edição de paciente */}
       <Modal
         visible={modalAberto}
@@ -849,6 +706,24 @@ const styles = StyleSheet.create({
   menuTextActive: {
     color: '#0C706E',
     fontWeight: '600',
+  },
+
+  // badge vermelho no item "Pedidos Reagendamento" do menu lateral
+  menuBadge: {
+    backgroundColor: '#E53935',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 'auto' as any,
+    paddingHorizontal: 5,
+  },
+
+  menuBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
   },
 
   content: {

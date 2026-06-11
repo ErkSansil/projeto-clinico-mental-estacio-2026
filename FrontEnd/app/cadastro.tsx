@@ -38,6 +38,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 // hook de autenticação para salvar o tipo de conta escolhido no contexto
 import { useAuth } from '../contexts/AuthContext';
 
+// badge global de reagendamentos pendentes
+import { useBadge } from '../contexts/BadgeContext';
+
 // tela principal de cadastro
 export default function CadastroScreen() {
 
@@ -52,6 +55,9 @@ export default function CadastroScreen() {
 
   // acessa o contexto para salvar o tipo de conta antes de avançar para os dados pessoais
   const { atualizarDadosCadastro } = useAuth();
+
+  // badge global de reagendamentos pendentes
+  const { pendentesReagendamento } = useBadge();
 
   return (
 
@@ -202,6 +208,13 @@ export default function CadastroScreen() {
                 <Text style={styles.menuText}>
                   Pedidos Reagendamento
                 </Text>
+
+                {/* badge vermelho com contagem de reagendamentos pendentes */}
+                {pendentesReagendamento > 0 && (
+                  <View style={styles.menuBadge}>
+                    <Text style={styles.menuBadgeText}>{pendentesReagendamento}</Text>
+                  </View>
+                )}
               </TouchableOpacity>
 
               {/* item de menu ativo: cadastro de estagiário (estado selecionado) */}
@@ -515,6 +528,25 @@ const styles = StyleSheet.create({
   menuTextActive: {
     color: '#0C706E',
     fontWeight: '600',
+  },
+
+  // badge de notificação no item de menu
+  menuBadge: {
+    backgroundColor: '#E53935',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 'auto' as any,
+    paddingHorizontal: 5,
+  },
+
+  // texto do badge de notificação
+  menuBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
   },
 
   // scroll

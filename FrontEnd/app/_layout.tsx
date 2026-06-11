@@ -5,11 +5,16 @@ import { StatusBar } from 'expo-status-bar';
 // importa o provider de autenticação para compartilhar token e dados entre telas
 import { AuthProvider } from '../contexts/AuthContext';
 
+// importa o provider de badge para manter a contagem de reagendamentos pendentes global
+import { BadgeProvider } from '../contexts/BadgeContext';
+
 // esse é o layout principal do app, onde eu organizo todas as rotas da pasta app
 export default function RootLayout() {
   return (
     // envolve toda a aplicação com o contexto de autenticação
     <AuthProvider>
+    {/* badge precisa ficar dentro do AuthProvider pois usa o token */}
+    <BadgeProvider>
       {/* aqui eu deixo o index como primeira tela, porque o index é o meu login */}
       <Stack initialRouteName="index" screenOptions={{ headerShown: false }}>
 
@@ -65,6 +70,7 @@ export default function RootLayout() {
 
       {/* aqui eu configuro a cor da barra de status do celular */}
       <StatusBar style="light" />
+    </BadgeProvider>
     </AuthProvider>
   );
 }

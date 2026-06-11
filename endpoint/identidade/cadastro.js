@@ -153,6 +153,25 @@ module.exports = (app) => {
 		}
 	});
 
+	// rota pública (qualquer usuário autenticado) para o estagiário ver o perfil básico do paciente
+	// retorna apenas dados não-sensíveis: nome, CPF, e-mail, celular, data de nascimento e status
+	app.get('/identidade/paciente/perfil', autenticar, async (req, res) => {
+		try {
+			const { cpf } = req.query;
+			if (!cpf) return res.status(400).json({ status: 400, mensagem: 'CPF é obrigatório.' });
+
+			const validacaoCpf = funcoesGerais.validarCpf(String(cpf).trim());
+			if (!validacaoCpf.valido) return res.status(400).json({ status: 400, mensagem: validacaoCpf.mensagem });
+
+			const pacientes = await db.selecionar('paciente', ['id', 'cpf', 'nome', 'email', 'celular', 'dataNascimento', 'ativo'], { cpf: String(cpf).trim() });
+			if (!pacientes || pacientes.length === 0) return res.status(404).json({ status: 404, mensagem: 'Paciente não encontrado.' });
+
+			res.status(200).json({ status: 200, paciente: pacientes[0] });
+		} catch (error) {
+			res.status(500).json({ erro: 'Erro interno: ' + error.message });
+		}
+	});
+
 	// rota para buscar dados completos de um paciente pelo CPF
 	// usada pelo frontend para preencher o formulário de edição
 	app.get('/identidade/paciente/detalhe', autenticar, autorizar('admin'), async (req, res) => {

@@ -91,19 +91,14 @@ module.exports = (app) => {
                 return res.status(erro.status).json({ status: erro.status, mensagem: erro.mensagem });
             }
 
-            // admin cria diretamente como 'agendada'; estagiário cria como 'pendente' para aprovação
-            const statusInicial = usuarioLogado.tipo === 'admin' ? 'agendada' : 'pendente';
-
+            // todo agendamento criado entra direto como 'agendada' — estagiário ou admin
             const criacaoConsultas = await servicos.criarConsultasRecorrentes(
                 paciente_id[0].id,
                 usuarioLogado.id,
                 sala_id[0].id,
                 data,
                 horario,
-                observacao,
-                10,
-                1,
-                statusInicial
+                observacao
             );
 
             if (!criacaoConsultas.valido) {

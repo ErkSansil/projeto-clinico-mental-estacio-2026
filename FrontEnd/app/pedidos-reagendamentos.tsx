@@ -26,12 +26,14 @@ import { LinearGradient } from 'expo-linear-gradient';
 // hook de autenticação para pegar o token JWT
 import { useAuth } from '../contexts/AuthContext';
 
+// hook do badge global — atualiza o contador no sidebar de todas as telas
+import { useBadge } from '../contexts/BadgeContext';
+
 // funções de API para buscar e responder pedidos
 import {
   listarPendenciasReagendamento,
   responderReagendamento,
-  listarAgendamentosPendentes,
-  aprovarAgendamento,
+  buscarConsultas,
 } from '../services/api';
 
 export default function PedidosReagendamentosScreen() {
@@ -43,55 +45,36 @@ export default function PedidosReagendamentosScreen() {
   // token do admin logado
   const { token } = useAuth();
 
+  // badge global de pendências — recarregarBadge atualiza o número em todas as telas
+  const { recarregarBadge } = useBadge();
+
   // controla qual aba está ativa: 'agendamentos' ou 'reagendamentos'
   const [abaAtiva, setAbaAtiva] = useState<'agendamentos' | 'reagendamentos'>('agendamentos');
 
-  // ─── AGENDAMENTOS PENDENTES ─────────────────────────────────────────────────
+  // ─── AGENDAMENTOS ───────────────────────────────────────────────────────────
 
-  // lista de consultas criadas por estagiários aguardando aprovação do admin
-  const [agendamentosPendentes, setAgendamentosPendentes] = useState<any[]>([]);
+  // lista de consultas agendadas para hoje
+  const [agendamentos, setAgendamentos] = useState<any[]>([]);
 
   // indica se os agendamentos estão sendo carregados
   const [carregandoAgendamentos, setCarregandoAgendamentos] = useState(false);
 
-  // id da consulta que está sendo aprovada/rejeitada no momento
-  const [respondendoAgendamento, setRespondendoAgendamento] = useState<string | null>(null);
-
-  // busca agendamentos com status 'pendente' do backend
-  const carregarAgendamentosPendentes = useCallback(async () => {
+  // busca os agendamentos de hoje para visão geral do admin
+  const carregarAgendamentos = useCallback(async () => {
     if (!token) return;
     setCarregandoAgendamentos(true);
     try {
-      const resultado = await listarAgendamentosPendentes(token);
-      if (resultado.status === 200 && Array.isArray(resultado.dados?.pendentes)) {
-        setAgendamentosPendentes(resultado.dados.pendentes);
-      }
+      const hoje = new Date();
+      const dataHoje = `${String(hoje.getDate()).padStart(2, '0')}/${String(hoje.getMonth() + 1).padStart(2, '0')}/${hoje.getFullYear()}`;
+      const resultado = await buscarConsultas({ data: dataHoje }, token);
+      const lista = Array.isArray(resultado.dados) ? resultado.dados : [];
+      setAgendamentos(lista);
     } catch {
-      // falha silenciosa — a tela permanece funcional
+      // falha silenciosa
     } finally {
       setCarregandoAgendamentos(false);
     }
   }, [token]);
-
-  // responde um pedido de agendamento como aprovado ou rejeitado
-  async function responderAgendamento(id: string, acao: 'aprovado' | 'rejeitado') {
-    if (!token) return;
-    setRespondendoAgendamento(id);
-    try {
-      const resultado = await aprovarAgendamento(id, acao, token);
-      if (resultado.status === 200) {
-        // remove da lista sem precisar recarregar tudo
-        setAgendamentosPendentes(anterior => anterior.filter(a => a.id !== id));
-        Alert.alert('Sucesso', resultado.dados.mensagem);
-      } else {
-        Alert.alert('Erro', resultado.dados?.mensagem || 'Não foi possível processar a ação.');
-      }
-    } catch {
-      Alert.alert('Erro', 'Não foi possível conectar ao servidor.');
-    } finally {
-      setRespondendoAgendamento(null);
-    }
-  }
 
   // ─── REAGENDAMENTOS PENDENTES ────────────────────────────────────────────────
 
@@ -127,6 +110,8 @@ export default function PedidosReagendamentosScreen() {
       const resultado = await responderReagendamento(id, acao, token);
       if (resultado.status === 200) {
         setReagendamentos(anterior => anterior.filter(r => String(r.id) !== id));
+        // atualiza o badge global para refletir a nova contagem em todas as telas
+        recarregarBadge();
         Alert.alert('Sucesso', acao === 'aprovado' ? 'Reagendamento aprovado.' : 'Reagendamento rejeitado.');
       } else {
         Alert.alert('Erro', resultado.dados?.mensagem || 'Não foi possível processar a ação.');
@@ -140,12 +125,12 @@ export default function PedidosReagendamentosScreen() {
 
   // carrega ambas as listas ao abrir a tela
   useEffect(() => {
-    carregarAgendamentosPendentes();
+    carregarAgendamentos();
     carregarReagendamentos();
-  }, [carregarAgendamentosPendentes, carregarReagendamentos]);
+  }, [carregarAgendamentos, carregarReagendamentos]);
 
   // total de pedidos pendentes somando os dois tipos — usado no badge do menu
-  const totalPendentes = agendamentosPendentes.length + reagendamentos.length;
+  const totalPendentes = agendamentos.length + reagendamentos.length;
 
   return (
     <LinearGradient
@@ -264,10 +249,10 @@ export default function PedidosReagendamentosScreen() {
           {/* título da tela */}
           <Text style={styles.pageTitle}>Pedidos Pendentes</Text>
           <Text style={styles.pageSubtitle}>
-            Aprove ou rejeite agendamentos e solicitações de reagendamento dos estagiários.
+            Acompanhe os agendamentos do dia e aprove ou rejeite solicitações de reagendamento.
           </Text>
 
-          {/* abas para alternar entre os dois tipos de pedido */}
+          {/* abas para alternar entre os dois tipos */}
           <View style={styles.tabsRow}>
             <TouchableOpacity
               style={[styles.tab, abaAtiva === 'agendamentos' && styles.tabAtiva]}
@@ -276,10 +261,9 @@ export default function PedidosReagendamentosScreen() {
               <Text style={[styles.tabText, abaAtiva === 'agendamentos' && styles.tabTextAtiva]}>
                 Agendamentos
               </Text>
-              {/* badge mostra a quantidade de pendências nesta aba */}
-              {agendamentosPendentes.length > 0 && (
+              {agendamentos.length > 0 && (
                 <View style={styles.tabBadge}>
-                  <Text style={styles.tabBadgeText}>{agendamentosPendentes.length}</Text>
+                  <Text style={styles.tabBadgeText}>{agendamentos.length}</Text>
                 </View>
               )}
             </TouchableOpacity>
@@ -299,63 +283,31 @@ export default function PedidosReagendamentosScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* ─── ABA: AGENDAMENTOS PENDENTES ──────────────────────────────── */}
+          {/* ─── ABA: AGENDAMENTOS DO DIA ──────────────────────────────── */}
           {abaAtiva === 'agendamentos' && (
             <>
               {carregandoAgendamentos ? (
                 <ActivityIndicator color="#0C706E" style={{ marginTop: 30 }} />
-              ) : agendamentosPendentes.length === 0 ? (
+              ) : agendamentos.length === 0 ? (
                 <View style={styles.emptyBox}>
-                  <Text style={styles.emptyText}>Nenhum agendamento aguardando aprovação.</Text>
+                  <Text style={styles.emptyText}>Nenhum agendamento para hoje.</Text>
                 </View>
-              ) : agendamentosPendentes.map((item) => (
+              ) : agendamentos.map((item) => (
                 <View key={item.id} style={styles.card}>
 
-                  {/* cabeçalho do card com nome do paciente e badge */}
                   <View style={styles.cardHeader}>
                     <Text style={styles.cardNome}>{item.pacienteNome ?? '—'}</Text>
                     <View style={styles.badgePendente}>
-                      <Text style={styles.badgePendenteText}>Pendente</Text>
+                      <Text style={styles.badgePendenteText}>{item.status ?? 'agendada'}</Text>
                     </View>
                   </View>
 
-                  {/* dados do agendamento */}
                   <Text style={styles.cardInfo}>Estagiário: {item.profissionalNome ?? '—'}</Text>
                   <Text style={styles.cardInfo}>Sala: {item.sala ?? '—'}</Text>
                   <Text style={styles.cardInfo}>
                     Data: {item.data ? new Date(item.data).toLocaleDateString('pt-BR') : '—'}
                     {'   '}Horário: {item.horario ? item.horario.slice(0, 5) : '—'}
                   </Text>
-                  {item.observacao ? (
-                    <Text style={styles.cardInfo}>Obs: {item.observacao}</Text>
-                  ) : null}
-
-                  {/* botões de ação — aprovação e rejeição */}
-                  <View style={styles.botoesRow}>
-
-                    <TouchableOpacity
-                      style={[styles.botaoRejeitar, respondendoAgendamento === item.id && { opacity: 0.6 }]}
-                      onPress={() => responderAgendamento(item.id, 'rejeitado')}
-                      disabled={respondendoAgendamento === item.id}
-                    >
-                      {respondendoAgendamento === item.id
-                        ? <ActivityIndicator color="#B91C1C" size="small" />
-                        : <Text style={styles.botaoRejeitarText}>Rejeitar</Text>
-                      }
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={[styles.botaoAprovar, respondendoAgendamento === item.id && { opacity: 0.6 }]}
-                      onPress={() => responderAgendamento(item.id, 'aprovado')}
-                      disabled={respondendoAgendamento === item.id}
-                    >
-                      {respondendoAgendamento === item.id
-                        ? <ActivityIndicator color="#fff" size="small" />
-                        : <Text style={styles.botaoAprovarText}>Aprovar</Text>
-                      }
-                    </TouchableOpacity>
-
-                  </View>
                 </View>
               ))}
             </>
@@ -380,14 +332,12 @@ export default function PedidosReagendamentosScreen() {
                     </View>
                   </View>
 
-                  {/* dados da solicitação de reagendamento */}
                   <Text style={styles.cardInfo}>Nova data: {item.novaData ?? '—'}</Text>
                   <Text style={styles.cardInfo}>Novo horário: {item.novoHorario ?? '—'}</Text>
                   {item.motivo ? (
                     <Text style={styles.cardInfo}>Motivo: {item.motivo}</Text>
                   ) : null}
 
-                  {/* botões de ação */}
                   <View style={styles.botoesRow}>
 
                     <TouchableOpacity

@@ -34,6 +34,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 // hook de autenticação para pegar o token
 import { useAuth } from '../contexts/AuthContext';
 
+// badge global de reagendamentos pendentes
+import { useBadge } from '../contexts/BadgeContext';
+
 // função que busca consultas do banco — filtra por status cancelado
 import { buscarConsultas } from '../services/api';
 
@@ -48,6 +51,9 @@ export default function CancelamentosScreen() {
 
   // token do usuário logado
   const { token } = useAuth();
+
+  // badge global de reagendamentos pendentes
+  const { pendentesReagendamento } = useBadge();
 
   // lista de cancelamentos carregada do banco
   const [solicitacoes, setSolicitacoes] = useState<any[]>([]);
@@ -235,6 +241,13 @@ export default function CancelamentosScreen() {
                 <Text style={styles.menuText}>
                   Pedidos Reagendamento
                 </Text>
+
+                {/* badge vermelho com contagem de reagendamentos pendentes */}
+                {pendentesReagendamento > 0 && (
+                  <View style={styles.menuBadge}>
+                    <Text style={styles.menuBadgeText}>{pendentesReagendamento}</Text>
+                  </View>
+                )}
               </TouchableOpacity>
 
               {/* item: cadastro de estagiário */}
@@ -493,6 +506,25 @@ const styles = StyleSheet.create({
   menuTextActive: {
     color: '#0C706E',
     fontWeight: '600',
+  },
+
+  // badge de notificação no item de menu
+  menuBadge: {
+    backgroundColor: '#E53935',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 'auto' as any,
+    paddingHorizontal: 5,
+  },
+
+  // texto do badge de notificação
+  menuBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
   },
 
   // conteúdo scrollável

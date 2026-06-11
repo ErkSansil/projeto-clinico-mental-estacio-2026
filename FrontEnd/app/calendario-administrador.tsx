@@ -38,6 +38,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 // hook de autenticação para pegar o token
 import { useAuth } from '../contexts/AuthContext';
 
+// badge global de reagendamentos pendentes
+import { useBadge } from '../contexts/BadgeContext';
+
 // função que busca consultas por data no banco
 import { buscarConsultas } from '../services/api';
 
@@ -144,6 +147,9 @@ export default function AdminCalendarScreen() {
 
   // token do usuário logado
   const { token } = useAuth();
+
+  // badge global de reagendamentos pendentes
+  const { pendentesReagendamento } = useBadge();
 
   // estado do mês atual exibido — inicia no mês atual
   const [currentMonth, setCurrentMonth] = useState(() => {
@@ -365,13 +371,20 @@ export default function AdminCalendarScreen() {
                 />
 
                 <Text style={styles.menuText}>Pedidos reagendamento</Text>
+
+                {/* badge vermelho com contagem de reagendamentos pendentes */}
+                {pendentesReagendamento > 0 && (
+                  <View style={styles.menuBadge}>
+                    <Text style={styles.menuBadgeText}>{pendentesReagendamento}</Text>
+                  </View>
+                )}
               </TouchableOpacity>
 
               {/* item de menu: cadastro de estagiário */}
               {/* rota para criação de novos estagiários */}
               <TouchableOpacity
                 style={styles.menuItem}
-                onPress={() => router.push('/cadastro-estagiario')}
+                onPress={() => router.push('/cadastro')}
               >
                 <Image
                   source={require('../assets/images/estagiario.png')}
@@ -1513,5 +1526,24 @@ const styles = StyleSheet.create({
   menuTextActive: {
     color: '#0C706E',
     fontWeight: '600',
+  },
+
+  // badge de notificação no item de menu
+  menuBadge: {
+    backgroundColor: '#E53935',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 'auto' as any,
+    paddingHorizontal: 5,
+  },
+
+  // texto do badge de notificação
+  menuBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
   },
   });

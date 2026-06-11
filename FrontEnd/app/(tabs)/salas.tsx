@@ -36,8 +36,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 // hook de autenticação para pegar o token
 import { useAuth } from '../../contexts/AuthContext';
 
-// função que busca as salas cadastradas no backend
-import { listarSalas } from '../../services/api';
+// função que busca as salas e as consultas do dia para mostrar ocupação real
+import { listarSalas, buscarConsultas } from '../../services/api';
 
 // menu limitado (estagiário)
 const menuItems = [
@@ -66,19 +66,42 @@ export default function SalasScreen() {
   // texto que o usuário digita na busca
   const [busca, setBusca] = useState('');
 
-  // carrega as salas ao abrir a tela
+  // salas com pelo menos uma consulta agendada hoje (pela descrição da sala)
+  const [salasOcupadasHoje, setSalasOcupadasHoje] = useState<string[]>([]);
+
+  // carrega as salas e os agendamentos de hoje ao abrir a tela
   useEffect(() => {
-    async function carregarSalas() {
+    async function carregarDados() {
       try {
         const resultado = await listarSalas(token!);
         if (resultado.status === 200 && resultado.dados?.salas) {
           setSalas(resultado.dados.salas);
         }
       } catch (e) {
-        // se não conseguir carregar, fica lista vazia mesmo
+        // sem salas — fica vazio
+      }
+
+      try {
+        // data de hoje no formato dd/mm/aaaa que a API aceita
+        const hoje = new Date();
+        const dataHoje = `${String(hoje.getDate()).padStart(2, '0')}/${String(hoje.getMonth() + 1).padStart(2, '0')}/${hoje.getFullYear()}`;
+        const resConsultas = await buscarConsultas({ data: dataHoje }, token!);
+        // a API pode retornar um array direto ou dentro de dados
+        const lista = Array.isArray(resConsultas.dados)
+          ? resConsultas.dados
+          : Array.isArray(resConsultas.dados?.consultas)
+            ? resConsultas.dados.consultas
+            : [];
+        // coleta os nomes das salas ocupadas hoje com status 'agendada'
+        const ocupadas = lista
+          .filter((c: any) => c.status === 'agendada' && c.sala)
+          .map((c: any) => String(c.sala).toLowerCase().trim());
+        setSalasOcupadasHoje([...new Set<string>(ocupadas)]);
+      } catch (e) {
+        // se não conseguir verificar ocupação, mostra tudo como disponível
       }
     }
-    carregarSalas();
+    carregarDados();
   }, []);
 
   // filtra as salas pelo texto da busca
@@ -179,10 +202,16 @@ export default function SalasScreen() {
                   </View>
                 </View>
 
-                {/* todas as salas cadastradas estão disponíveis para uso */}
-                <View style={[styles.badge, styles.badgeFree]}>
-                  <Text style={[styles.badgeText, styles.badgeTextFree]}>Ativa</Text>
-                </View>
+                {/* badge de ocupação baseado nos agendamentos de hoje */}
+                {salasOcupadasHoje.includes(String(sala.descricao).toLowerCase().trim()) ? (
+                  <View style={[styles.badge, styles.badgeBusy]}>
+                    <Text style={[styles.badgeText, styles.badgeTextBusy]}>Ocupada hoje</Text>
+                  </View>
+                ) : (
+                  <View style={[styles.badge, styles.badgeFree]}>
+                    <Text style={[styles.badgeText, styles.badgeTextFree]}>Disponível</Text>
+                  </View>
+                )}
               </View>
             ))}
           </View>
