@@ -269,14 +269,6 @@ export default function SalasAdminScreen() {
                 Gerencie disponibilidade, ocupação e horários das salas.
               </Text>
             </View>
-
-            {isDesktop && (
-              <TouchableOpacity style={styles.newButton}>
-                <Text style={styles.newButtonText}>
-                  + Nova sala
-                </Text>
-              </TouchableOpacity>
-            )}
           </View>
 
           {/* pesquisa por nome da sala */}

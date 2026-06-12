@@ -274,6 +274,106 @@ async function buscarConsultaPorId(consulta_id) {
 	return await db.selecionar('consulta', ['*'], { id: consulta_id });
 }
 
+async function buscarConsultasPendentes() {
+	const sql = `
+                SELECT
+                    c.id,
+                    c.data,
+                    c.horario,
+                    c.observacao,
+                    c.status,
+                    p.nome  AS pacienteNome,
+                    p.cpf   AS pacienteCpf,
+                    pr.nome AS profissionalNome,
+                    pr.matricula AS profissionalMatricula,
+                    s.descricao  AS sala
+                FROM consulta c
+                LEFT JOIN paciente     p  ON c.paciente_id     = p.id
+                LEFT JOIN profissional pr ON c.profissional_id = pr.id
+                LEFT JOIN sala         s  ON c.sala_id         = s.id
+                WHERE c.status = 'pendente'
+                ORDER BY c.data ASC, c.horario ASC
+            `;
+	return await db.executarQuery(sql, []);
+}
+
+async function buscarConsultasRelatorio(filtros) {
+	// todos os agendamentos com presença, profissional, paciente e sala
+	const sqlAtendimentos = `
+                SELECT
+                    c.id AS consulta_id,
+                    p.nome AS paciente,
+                    p.cpf AS cpf_paciente,
+                    pr.nome AS profissional,
+                    pr.matricula AS matricula_profissional,
+                    s.descricao AS sala,
+                    c.data,
+                    c.horario,
+                    c.status,
+                    c.observacao,
+                    CASE WHEN cp.presente = 1 THEN 'Presente'
+                         WHEN cp.presente = 0 THEN 'Ausente'
+                         ELSE 'Não registrado'
+                    END AS presenca
+                FROM consulta c
+                LEFT JOIN paciente p ON c.paciente_id = p.id
+                LEFT JOIN profissional pr ON c.profissional_id = pr.id
+                LEFT JOIN sala s ON c.sala_id = s.id
+                LEFT JOIN controlePresenca cp ON c.id = cp.consulta_id
+                ORDER BY c.data DESC, c.horario DESC
+            `;
+
+	// consultas com status cancelada trazendo quem cancelou
+	const sqlCancelamentos = `
+                SELECT
+                    c.id AS consulta_id,
+                    p.nome AS paciente,
+                    p.cpf AS cpf_paciente,
+                    pr.nome AS profissional,
+                    pr.matricula AS matricula_profissional,
+                    s.descricao AS sala,
+                    c.data,
+                    c.horario,
+                    c.observacao AS motivo_cancelamento
+                FROM consulta c
+                LEFT JOIN paciente p ON c.paciente_id = p.id
+                LEFT JOIN profissional pr ON c.profissional_id = pr.id
+                LEFT JOIN sala s ON c.sala_id = s.id
+                WHERE c.status = 'cancelada'
+                ORDER BY c.data DESC, c.horario DESC
+            `;
+
+	// todas as solicitações de reagendamento com dados da consulta original
+	const sqlReagendamentos = `
+                SELECT
+                    pc.id AS solicitacao_id,
+                    c.id AS consulta_id,
+                    p.nome AS paciente,
+                    p.cpf AS cpf_paciente,
+                    pr.nome AS profissional,
+                    pr.matricula AS matricula_profissional,
+                    s.descricao AS sala,
+                    c.data AS data_original,
+                    c.horario AS horario_original,
+                    pc.novaData AS nova_data,
+                    pc.novoHorario AS novo_horario,
+                    pc.motivo,
+                    pc.statusSolicitacao AS status_solicitacao
+                FROM pendenciaConsulta pc
+                LEFT JOIN consulta c ON pc.consulta_id = c.id
+                LEFT JOIN paciente p ON c.paciente_id = p.id
+                LEFT JOIN profissional pr ON c.profissional_id = pr.id
+                LEFT JOIN sala s ON c.sala_id = s.id
+                ORDER BY pc.id DESC
+            `;
+
+	return [atendimentos, cancelamentos, reagendamentos] = await Promise.all([
+		db.executarQuery(sqlAtendimentos, []),
+		db.executarQuery(sqlCancelamentos, []),
+		db.executarQuery(sqlReagendamentos, []),
+	]);
+}
+
 module.exports = {
 	verificarConsultaOcupada,
 	gerarDatasRecorrentes,
@@ -286,5 +386,6 @@ module.exports = {
 	atualizarStatusReagendamento,
 	atualizarConsulta,
 	buscarPendenciasReagendamento,
-	buscarConsultaPorId
+	buscarConsultaPorId,
+	buscarConsultasPendentes
 };

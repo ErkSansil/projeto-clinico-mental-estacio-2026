@@ -163,80 +163,11 @@ module.exports = (app) => {
     // retorna atendimentos, cancelamentos e reagendamentos em um único endpoint
     app.get(CONSULTA + '/relatorio', autenticar, async (req, res) => {
         try {
-            // todos os agendamentos com presença, profissional, paciente e sala
-            const sqlAtendimentos = `
-                SELECT
-                    c.id AS consulta_id,
-                    p.nome AS paciente,
-                    p.cpf AS cpf_paciente,
-                    pr.nome AS profissional,
-                    pr.matricula AS matricula_profissional,
-                    s.descricao AS sala,
-                    c.data,
-                    c.horario,
-                    c.status,
-                    c.observacao,
-                    CASE WHEN cp.presente = 1 THEN 'Presente'
-                         WHEN cp.presente = 0 THEN 'Ausente'
-                         ELSE 'Não registrado'
-                    END AS presenca
-                FROM consulta c
-                LEFT JOIN paciente p ON c.paciente_id = p.id
-                LEFT JOIN profissional pr ON c.profissional_id = pr.id
-                LEFT JOIN sala s ON c.sala_id = s.id
-                LEFT JOIN controlePresenca cp ON c.id = cp.consulta_id
-                ORDER BY c.data DESC, c.horario DESC
-            `;
+            const consultasRelatorio = await servicos.buscarConsultasRelatorio({});
 
-            // consultas com status cancelada trazendo quem cancelou
-            const sqlCancelamentos = `
-                SELECT
-                    c.id AS consulta_id,
-                    p.nome AS paciente,
-                    p.cpf AS cpf_paciente,
-                    pr.nome AS profissional,
-                    pr.matricula AS matricula_profissional,
-                    s.descricao AS sala,
-                    c.data,
-                    c.horario,
-                    c.observacao AS motivo_cancelamento
-                FROM consulta c
-                LEFT JOIN paciente p ON c.paciente_id = p.id
-                LEFT JOIN profissional pr ON c.profissional_id = pr.id
-                LEFT JOIN sala s ON c.sala_id = s.id
-                WHERE c.status = 'cancelada'
-                ORDER BY c.data DESC, c.horario DESC
-            `;
-
-            // todas as solicitações de reagendamento com dados da consulta original
-            const sqlReagendamentos = `
-                SELECT
-                    pc.id AS solicitacao_id,
-                    c.id AS consulta_id,
-                    p.nome AS paciente,
-                    p.cpf AS cpf_paciente,
-                    pr.nome AS profissional,
-                    pr.matricula AS matricula_profissional,
-                    s.descricao AS sala,
-                    c.data AS data_original,
-                    c.horario AS horario_original,
-                    pc.novaData AS nova_data,
-                    pc.novoHorario AS novo_horario,
-                    pc.motivo,
-                    pc.statusSolicitacao AS status_solicitacao
-                FROM pendenciaConsulta pc
-                LEFT JOIN consulta c ON pc.consulta_id = c.id
-                LEFT JOIN paciente p ON c.paciente_id = p.id
-                LEFT JOIN profissional pr ON c.profissional_id = pr.id
-                LEFT JOIN sala s ON c.sala_id = s.id
-                ORDER BY pc.id DESC
-            `;
-
-            const [atendimentos, cancelamentos, reagendamentos] = await Promise.all([
-                db.executarQuery(sqlAtendimentos, []),
-                db.executarQuery(sqlCancelamentos, []),
-                db.executarQuery(sqlReagendamentos, []),
-            ]);
+            atendimentos = consultasRelatorio[0];
+            cancelamentos = consultasRelatorio[1];
+            reagendamentos = consultasRelatorio[2];
 
             res.status(200).json({ status: 200, atendimentos, cancelamentos, reagendamentos });
         } catch (error) {
@@ -248,26 +179,12 @@ module.exports = (app) => {
     // retorna dados completos: paciente, profissional, sala, data, horário
     app.get(CONSULTA + '/pendentes', autenticar, autorizar('admin'), async (req, res) => {
         try {
-            const sql = `
-                SELECT
-                    c.id,
-                    c.data,
-                    c.horario,
-                    c.observacao,
-                    c.status,
-                    p.nome  AS pacienteNome,
-                    p.cpf   AS pacienteCpf,
-                    pr.nome AS profissionalNome,
-                    pr.matricula AS profissionalMatricula,
-                    s.descricao  AS sala
-                FROM consulta c
-                LEFT JOIN paciente     p  ON c.paciente_id     = p.id
-                LEFT JOIN profissional pr ON c.profissional_id = pr.id
-                LEFT JOIN sala         s  ON c.sala_id         = s.id
-                WHERE c.status = 'pendente'
-                ORDER BY c.data ASC, c.horario ASC
-            `;
-            const pendentes = await db.executarQuery(sql, []);
+            const pendentes = await servicos.buscarConsultasPendentes();
+        
+            if (!pendentes || pendentes.length === 0) {
+                return res.status(404).json({ status: 404, mensagem: 'Nenhuma consulta pendente encontrada.' });
+            }
+
             res.status(200).json({ status: 200, pendentes });
         } catch (error) {
             res.status(500).json({ status: 500, mensagem: 'Erro ao listar agendamentos pendentes. Detalhes: ' + error.message });
